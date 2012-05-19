@@ -1,6 +1,43 @@
 (ns chess.logic.board
   (:refer-clojure :exclude [==])
-  (:use clojure.core.logic))
+  (:use clojure.core.logic
+        [clojure.tools.macro :only [macrolet]]
+        [clojure.core.incubator :only [-?>]]))
+
+(def ^:private sq-syms
+  (for [x "abcdefgh"
+        y (rest (range 9))]
+    (symbol (str x y))))
+
+(defmacro ^:private defboard-helper
+  []
+  (list 'deftype 'Board (vec sq-syms)))
+(defboard-helper)
+
+(defprotocol IUnifyWithBoard
+  (unify-with-board [u v s]))
+
+(extend-type Board
+  IUnifyTerms
+  (unify-terms [u v s] (unify-with-board v u s)))
+
+(macrolet [(fooze []
+                  (list* `-?> 's
+                         (for [sq sq-syms]
+                           `(unify-terms
+                             (. ~'u ~sq)
+                             (. ~'v ~sq)))))]
+
+          (extend-protocol IUnifyWithBoard
+            nil
+            (unify-with-board [u v s] false)
+            Board
+            (unify-with-board [u v s]
+              (fooze))))
+
+(extend-type Object
+  IUnifyWithBoard
+  (unify-with-board [u v s] false))
 
 
 (def ^:private ranks (range 1 9))
