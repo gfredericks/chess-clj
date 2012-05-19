@@ -15,3 +15,15 @@
     (time (dotimes [n 10] (f starting-pos)))
     (println "Midgame")
     (time (dotimes [n 10] (f midgame-pos)))))
+
+;; * Output at commit 78f29f
+;; ** Crappy netbook
+;;    Initial
+;;    "Elapsed time: 512626.707516 msecs"
+;;    Midgame
+;;    "Elapsed time: 1612757.248776 msecs"
+;; ** VM on laptop
+;;    Initial
+;;    "Elapsed time: 176043.250907 msecs"
+;;    Midgame
+;;    "Elapsed time: 596567.75063 msecs"
