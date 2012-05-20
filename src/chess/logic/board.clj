@@ -24,12 +24,13 @@
   (unify-terms [u v s] (unify-with-board v u s)))
 
 (macrolet [(fooze []
-                  (list* `-?> 's
-                         (for [sq sq-syms]
-                           `(unify-terms
-                             (. ~'u ~sq)
-                             (. ~'v ~sq)))))]
-
+                  (misquote
+                   (-?> s
+                        ~@(for [sq sq-syms]
+                            (misquote
+                             (unify-terms
+                              (. u ~sq)
+                              (. v ~sq)))))))]
           (extend-protocol IUnifyWithBoard
             nil
             (unify-with-board [u v s] false)
@@ -116,10 +117,11 @@
              (-> sq-sym name second str read-string)]]))
 
 (macrolet [(foo []
-                (list* 'defne 'board-entryo
-                       '[board square piece]
-                       (for [[sq-sym sq] sq-syms-with-sqrs]
-                         (list ['_ sq '_] `(== ~'piece (. ~'board ~sq-sym))))))]
+                (misquote
+                 (defne board-entryo
+                   [board square piece]
+                   ~@(for [[sq-sym sq] sq-syms-with-sqrs]
+                       (misquote ([_ ~sq _] (== piece (. board ~sq-sym))))))))]
           (foo))
 
 (macrolet [(bec []
