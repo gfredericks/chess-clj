@@ -2,12 +2,14 @@
   (:refer-clojure :exclude [==])
   (:use clojure.core.logic
         [clojure.tools.macro :only [macrolet]]
-        [clojure.core.incubator :only [-?>]]))
+        [clojure.core.incubator :only [-?>]]
+        [misquote.core :only [misquote]]))
 
 (def ^:private sq-syms
-  (for [x "abcdefgh"
-        y (rest (range 9))]
-    (symbol (str x y))))
+  (vec
+   (for [y (range 8 0 -1)
+         x "abcdefgh"]
+     (symbol (str x y)))))
 
 (defmacro ^:private defboard-helper
   []
@@ -39,6 +41,40 @@
   IUnifyWithBoard
   (unify-with-board [u v s] false))
 
+(defn vecs
+  [coll]
+  (vec (map vec coll)))
+
+(macrolet [(foo []
+                (->> sq-syms
+                     (map (partial list '. 'b))
+                     (partition 8)
+                     vecs))]
+          (defn board->data
+            "Converts a Board to a 2d vector"
+            [b]
+            (foo)))
+
+(defn data->board
+  "Converts a 2d vector to a board"
+  [v]
+  (apply ->Board (apply concat v)))
+
+(extend-type Board
+  IWalkTerm
+  (walk-term [board s]
+    (->> board
+         board->data
+         (apply concat)
+         (map #(walk* s %))
+         (partition 8)
+         data->board))
+  IReifyTerm
+  (reify-term [board s]
+    (->> board
+         board->data
+         (apply concat)
+         (reduce -reify* s))))
 
 (def ^:private ranks (range 1 9))
 (defn ranko [x] (membero x ranks))
@@ -67,63 +103,40 @@
   [sq1 sq2]
   ([[x y] [a b]] (rank-inco b y) (file-inco x a)))
 
-(defne board-ranko
-  [rank]
-  ([[a b c d e f g h]]))
+(macrolet [(foo [name]
+                `(fresh ~sq-syms
+                        (== ~name ~(cons '->Board sq-syms))))]
+          (defn boardo
+            [board]
+            (foo board)))
 
+(def sq-syms-with-sqrs
+  (for [sq-sym sq-syms]
+    [sq-sym [(-> sq-sym name first str keyword)
+             (-> sq-sym name second str read-string)]]))
 
-;; is letting these variables be fresh an issue with goals not halting?
-(defne boardo
-  [ranks]
-  ([[a b c d e f g h]]
-     (board-ranko a)
-     (board-ranko b)
-     (board-ranko c)
-     (board-ranko d)
-     (board-ranko e)
-     (board-ranko f)
-     (board-ranko g)
-     (board-ranko h)))
+(macrolet [(foo []
+                (list* 'defne 'board-entryo
+                       '[board square piece]
+                       (for [[sq-sym sq] sq-syms-with-sqrs]
+                         (list ['_ sq '_] `(== ~'piece (. ~'board ~sq-sym))))))]
+          (foo))
 
-;; Did this "backwards" so that a default pretty-print of a board
-;; is oriented the way you would expect.
-(defn ranks-entryo
-  [board rank entry]
-  (fresh [x8 x7 x6 x5 x4 x3 x2 x1]
-         (== board [x8 x7 x6 x5 x4 x3 x2 x1])
-         (matche [rank]
-                 ([8] (== entry x8))
-                 ([7] (== entry x7))
-                 ([6] (== entry x6))
-                 ([5] (== entry x5))
-                 ([4] (== entry x4))
-                 ([3] (== entry x3))
-                 ([2] (== entry x2))
-                 ([1] (== entry x1)))))
+(macrolet [(bec []
+                (list 'defn 'board-entry-changeo
+                      '[before-board after-board square before-entry after-entry]
+                      (list* `all
+                             (list 'boardo 'before-board)
+                             (list 'boardo 'after-board)
+                             (for [[sq-sym sq] sq-syms-with-sqrs]
+                               `(conde ((== (. ~'before-board ~sq-sym)
+                                            (. ~'after-board ~sq-sym)))
+                                       ((== ~'square ~sq)
+                                        (== (. ~'before-board ~sq-sym) ~'before-entry)
+                                        (== (. ~'after-board ~sq-sym) ~'after-entry)))))))]
+          (bec))
 
-(defn rank-entryo
-  [rank file entry]
-  (fresh [a b c d e f g h]
-         (== rank [a b c d e f g h])
-         (matche [file]
-                 ([:a] (== entry a))
-                 ([:b] (== entry b))
-                 ([:c] (== entry c))
-                 ([:d] (== entry d))
-                 ([:e] (== entry e))
-                 ([:f] (== entry f))
-                 ([:g] (== entry g))
-                 ([:h] (== entry h)))))
-
-(defne board-entryo
-  [board square piece]
-  ([board [file rank] piece]
-     (boardo board)
-     (fresh [rank']
-            (ranks-entryo board rank rank')
-            (rank-entryo rank' file piece))))
-
-(defne rank-almost-equalo
+#_(defne rank-almost-equalo
   [rank-a rank-b file relater]
   ([[a . r] [b . r] :a _] (relater a b))
   ([[ab . ra] [ab . rb] x _]
@@ -131,7 +144,7 @@
             (file-inco x' x)
             (rank-almost-equalo ra rb x' relater))))
 
-(defne board-almost-equalo
+#_(defne board-almost-equalo
   [ranks-a ranks-b rank relater]
   ([[a . r] [b . r] 8 _] (relater a b))
   ([[ab . ra] [ab . rb] x _]
@@ -139,7 +152,7 @@
             (rank-inco x x')
             (board-almost-equalo ra rb x' relater))))
 
-(defn board-entry-changeo
+#_(defn board-entry-changeo
   "Succeeds when before-board and after-board are the same boards
   except at square"
   [before-board after-board square before-entry after-entry]

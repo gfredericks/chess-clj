@@ -308,7 +308,15 @@
                 (board-entryo after-board this-king-at this-king)
                 (safeo after-board this-king-at other-color))))
 
+(defn data->pos
+  "Given a user-friendly map of a position, returns a
+  logic-optimized thinger."
+  [{:keys [board turn]}]
+  {:board (data->board board)
+   :turn turn})
 
-;;
-;; tmp dev stuff
-;;
+(defn pos->data
+  "The other way"
+  [{:keys [board turn]}]
+  {:board (board->data board)
+   :turn turn})

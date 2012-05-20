@@ -39,14 +39,14 @@
   (run* [q]
         (fresh [move after-pos]
                (== q [move after-pos])
-               (legal-moveo (select-keys pos [:board :turn]) move after-pos))))
+               (legal-moveo (data->pos pos) move after-pos))))
 
 (defn unmoves
   [pos]
   (run* [q]
         (fresh [move before-pos]
                (== q [move before-pos])
-               (legal-moveo before-pos move (select-keys pos [:board :turn])))))
+               (legal-moveo before-pos move (data->pos pos)))))
 
 ;;
 ;; search
