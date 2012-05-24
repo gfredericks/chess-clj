@@ -14,6 +14,13 @@
   [kw]
   (->> kw name seq (map str) ((fn [[a b]] [(keyword a) (read-string b)]))))
 
+(deftest starting-pos-test
+  (-> starting-pos
+      moves
+      count
+      (= 20)
+      (is)))
+
 (deftest legal-moves-test
   (let [pos (FEN->pos "r2qk2r/pp3ppp/1npbpnb1/8/3P3N/2N1P1P1/PP2BP1P/R1BQ1RK1 b kq - 2 11"),
         mvs (->> pos moves (map first) set),

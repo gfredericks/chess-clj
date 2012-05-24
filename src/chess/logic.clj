@@ -157,12 +157,9 @@
 (defn- concrete-boardo
   [board]
   (all
-   (boardo board)
-   (everyo (fn [rank] (everyo (fn [entry] (conde ((whiteo entry))
-                                                 ((blacko entry))
-                                                 ((blanko entry))))
-                              rank))
-           board)))
+   (boardo board (fn [entry] (conde ((whiteo entry))
+                                    ((blacko entry))
+                                    ((blanko entry)))))))
 
 (defn now [] (System/currentTimeMillis))
 
@@ -308,7 +305,15 @@
                 (board-entryo after-board this-king-at this-king)
                 (safeo after-board this-king-at other-color))))
 
+(defn data->pos
+  "Given a user-friendly map of a position, returns a
+  logic-optimized thinger."
+  [{:keys [board turn]}]
+  {:board (matrix->tree board)
+   :turn turn})
 
-;;
-;; tmp dev stuff
-;;
+(defn pos->data
+  "The other way"
+  [{:keys [board turn]}]
+  {:board (tree->matrix board)
+   :turn turn})

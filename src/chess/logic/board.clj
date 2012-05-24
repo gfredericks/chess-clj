@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [==])
   (:use clojure.core.logic))
 
+;; squares (maybe we should do these with binary coordinates instead...)
 
 (def ^:private ranks (range 1 9))
 (defn ranko [x] (membero x ranks))
@@ -30,90 +31,93 @@
   [sq1 sq2]
   ([[x y] [a b]] (rank-inco b y) (file-inco x a)))
 
-(defne board-ranko
-  [rank]
-  ([[a b c d e f g h]]))
+(defrel coordo ^:index pair-coord ^:index tree-coord)
+(let [all-pair-coords (for [r (reverse ranks) f files] [f r]),
+      bit [0 1]
+      all-tree-coords (for [x1 bit
+                            x2 bit
+                            x3 bit
+                            x4 bit
+                            x5 bit
+                            x6 bit]
+                        [x1 x2 x3 x4 x5 x6])]
+  (doseq [[pair-coord tree-coord] (map vector all-pair-coords all-tree-coords)]
+    (fact coordo pair-coord tree-coord)))
 
+;;
+;; board things. Boards are binary trees with 64 leaves.
+;;
 
-;; is letting these variables be fresh an issue with goals not halting?
-(defne boardo
-  [ranks]
-  ([[a b c d e f g h]]
-     (board-ranko a)
-     (board-ranko b)
-     (board-ranko c)
-     (board-ranko d)
-     (board-ranko e)
-     (board-ranko f)
-     (board-ranko g)
-     (board-ranko h)))
+(defn level-treeo
+  [tree depth-in-unary goalo]
+  (conde ((emptyo depth-in-unary) (goalo tree))
+         ((fresh [lhs rhs dec]
+                 (resto depth-in-unary dec)
+                 (== [lhs rhs] tree)
+                 (level-treeo lhs dec goalo)
+                 (level-treeo rhs dec goalo)))))
 
-;; Did this "backwards" so that a default pretty-print of a board
-;; is oriented the way you would expect.
-(defn ranks-entryo
-  [board rank entry]
-  (fresh [x8 x7 x6 x5 x4 x3 x2 x1]
-         (== board [x8 x7 x6 x5 x4 x3 x2 x1])
-         (matche [rank]
-                 ([8] (== entry x8))
-                 ([7] (== entry x7))
-                 ([6] (== entry x6))
-                 ([5] (== entry x5))
-                 ([4] (== entry x4))
-                 ([3] (== entry x3))
-                 ([2] (== entry x2))
-                 ([1] (== entry x1)))))
+(defn boardo
+  [board goalo]
+  (level-treeo board (repeat 6 0) goalo))
 
-(defn rank-entryo
-  [rank file entry]
-  (fresh [a b c d e f g h]
-         (== rank [a b c d e f g h])
-         (matche [file]
-                 ([:a] (== entry a))
-                 ([:b] (== entry b))
-                 ([:c] (== entry c))
-                 ([:d] (== entry d))
-                 ([:e] (== entry e))
-                 ([:f] (== entry f))
-                 ([:g] (== entry g))
-                 ([:h] (== entry h)))))
+(let [tree-8 #(->> % (partition 4) (map (partial partition 2)))]
+  (defn matrix->tree
+    [m]
+    (tree-8 (map tree-8 m))))
 
-(defne board-entryo
+(let [pac (partial apply concat)
+      tree-8-inv (comp pac pac)]
+  (defn tree->matrix
+    [m]
+    (map tree-8-inv (tree-8-inv m))))
+
+(defn tree-entryo
+  [tree coord thing]
+  (conde
+   ((emptyo coord) (== tree thing))
+   ((fresh [l r c cs]
+           (firsto coord c)
+           (resto coord cs)
+           (== [l r] tree)
+           (conde
+            ((== 0 c) (tree-entryo l cs thing))
+            ((== 1 c) (tree-entryo r cs thing)))))))
+
+(defn board-entryo
   [board square piece]
-  ([board [file rank] piece]
-     (boardo board)
-     (fresh [rank']
-            (ranks-entryo board rank rank')
-            (rank-entryo rank' file piece))))
+  (fresh [tree-coord]
+         (coordo square tree-coord)
+         (tree-entryo board tree-coord piece)))
 
-(defne rank-almost-equalo
-  [rank-a rank-b file relater]
-  ([[a . r] [b . r] :a _] (relater a b))
-  ([[ab . ra] [ab . rb] x _]
-     (fresh [x']
-            (file-inco x' x)
-            (rank-almost-equalo ra rb x' relater))))
-
-(defne board-almost-equalo
-  [ranks-a ranks-b rank relater]
-  ([[a . r] [b . r] 8 _] (relater a b))
-  ([[ab . ra] [ab . rb] x _]
-     (fresh [x']
-            (rank-inco x x')
-            (board-almost-equalo ra rb x' relater))))
+(defn tree-almost-equalo
+  "Succeeds when two trees differ only at the named coordinate."
+  [tree-a tree-b coord thing-a thing-b]
+  (conde
+   ((emptyo coord)
+    (== tree-a thing-a)
+    (== tree-b thing-b))
+   ((fresh [la ra lb rb c cs]
+           (firsto coord c)
+           (resto coord cs)
+           (== [la ra] tree-a)
+           (== [lb rb] tree-b)
+           (conde
+            ((== 0 c)
+             (tree-almost-equalo la lb cs thing-a thing-b)
+             (== ra rb))
+            ((== 1 c)
+             (tree-almost-equalo ra rb cs thing-a thing-b)
+             (== la lb)))))))
 
 (defn board-entry-changeo
   "Succeeds when before-board and after-board are the same boards
   except at square"
   [before-board after-board square before-entry after-entry]
-  (fresh [x y]
-         (== square [x y])
-         (board-almost-equalo
-          before-board
-          after-board
-          y
-          (fn [r1 r2]
-            (rank-almost-equalo r1 r2 x
-                                (fn [b a]
-                                  (== b before-entry)
-                                  (== a after-entry)))))))
+  (fresh [tree-coord]
+         (coordo square tree-coord)
+         (tree-almost-equalo before-board
+                             after-board
+                             tree-coord
+                             before-entry
+                             after-entry)))

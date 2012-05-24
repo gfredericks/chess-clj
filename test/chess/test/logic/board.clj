@@ -10,8 +10,8 @@
   (t/is (= [[:a 1]] (run* [q]
                         (fresh [x y]
                                (board-entry-changeo
-                                blank-board
-                                (update-in blank-board [7 0] :K)
+                                (matrix->tree blank-board)
+                                (matrix->tree (update-in blank-board [7 0] :K))
                                 q
                                 x
                                 y)))))
