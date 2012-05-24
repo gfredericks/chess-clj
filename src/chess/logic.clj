@@ -208,105 +208,108 @@
   of the from-square to the to-square and everything else is the
   same."
   [bboard from-square aboard to-square piece]
-  (fresh [mid-board foo blank]
-         (blanko blank)
-         (board-entry-changeo
-          bboard
-          mid-board
-          from-square
-          piece
-          blank)
-         (board-entry-changeo
-          mid-board
-          aboard
-          to-square
-          foo
-          piece)))
+  (fresh-board mid-board
+               (fresh [foo blank]
+                      (blanko blank)
+                      (board-entry-changeo
+                       bboard
+                       mid-board
+                       from-square
+                       piece
+                       blank)
+                      (board-entry-changeo
+                       mid-board
+                       aboard
+                       to-square
+                       foo
+                       piece))))
 
 ;; We might want to add checks that the piece-set is legal? :/
 ;; It is certainly describeable in core.logic but not sure about
 ;; performance.
 (defn legal-moveo
   [before-pos move after-pos]
-  (fresh [from-square to-square promotion piece color before-board
-          after-board other-color]
-         (== move
-             {:from from-square,
-              :to to-square,
-              :promotion promotion})
-         (== before-pos
-             {:turn color
-              :board before-board})
-         (== after-pos
-             {:turn other-color
-              :board after-board})
-         (opposite-coloro color other-color)
-         (board-entryo before-board from-square piece)
-         (coloro color piece)
+  (fresh-board before-board
+               (fresh-board after-board
+                            (fresh [from-square to-square promotion piece color
+                                    other-color]
+                                   (== move
+                                       {:from from-square,
+                                        :to to-square,
+                                        :promotion promotion})
+                                   (== before-pos
+                                       {:turn color
+                                        :board before-board})
+                                   (== after-pos
+                                       {:turn other-color
+                                        :board after-board})
+                                   (opposite-coloro color other-color)
+                                   (board-entryo before-board from-square piece)
+                                   (coloro color piece)
 
-         ;; types of moves
-         (let [move-or-capture (fresh [moved-onto]
-                                      ;; should make sure it's not a king
-                                      (board-entryo before-board to-square moved-onto)
-                                      (conde ((blanko moved-onto))
-                                             ((coloro other-color moved-onto))))]
-           (conde
-            ((kingo piece)
-             (normal-king-moveo from-square to-square)
-             (simple-board-moveo before-board from-square after-board to-square piece)
-             move-or-capture)
+                                   ;; types of moves
+                                   (let [move-or-capture (fresh [moved-onto]
+                                                                ;; should make sure it's not a king
+                                                                (board-entryo before-board to-square moved-onto)
+                                                                (conde ((blanko moved-onto))
+                                                                       ((coloro other-color moved-onto))))]
+                                     (conde
+                                      ((kingo piece)
+                                       (normal-king-moveo from-square to-square)
+                                       (simple-board-moveo before-board from-square after-board to-square piece)
+                                       move-or-capture)
 
-            ((queeno piece)
-             (normal-queen-moveo before-board from-square to-square)
-             (simple-board-moveo before-board from-square after-board to-square piece)
-             move-or-capture)
+                                      ((queeno piece)
+                                       (normal-queen-moveo before-board from-square to-square)
+                                       (simple-board-moveo before-board from-square after-board to-square piece)
+                                       move-or-capture)
 
-            ((rooko piece)
-             (normal-rook-moveo before-board from-square to-square)
-             (simple-board-moveo before-board from-square after-board to-square piece)
-             move-or-capture)
+                                      ((rooko piece)
+                                       (normal-rook-moveo before-board from-square to-square)
+                                       (simple-board-moveo before-board from-square after-board to-square piece)
+                                       move-or-capture)
 
-            ((bishopo piece)
-             (normal-bishop-moveo before-board from-square to-square)
-             (simple-board-moveo before-board from-square after-board to-square piece)
-             move-or-capture)
+                                      ((bishopo piece)
+                                       (normal-bishop-moveo before-board from-square to-square)
+                                       (simple-board-moveo before-board from-square after-board to-square piece)
+                                       move-or-capture)
 
-            ((knighto piece)
-             (normal-knight-moveo from-square to-square)
-             (simple-board-moveo before-board from-square after-board to-square piece)
-             move-or-capture)
+                                      ((knighto piece)
+                                       (normal-knight-moveo from-square to-square)
+                                       (simple-board-moveo before-board from-square after-board to-square piece)
+                                       move-or-capture)
 
-            ((pawno piece)
-             (fresh [thing-at-to-square]
-                    (conde
-                     ;; pawn capture (but en passant!)
-                     ((attacking-pawn-moveo color from-square to-square)
-                      (coloro other-color thing-at-to-square))
+                                      ((pawno piece)
+                                       (fresh [thing-at-to-square]
+                                              (conde
+                                               ;; pawn capture (but en passant!)
+                                               ((attacking-pawn-moveo color from-square to-square)
+                                                (coloro other-color thing-at-to-square))
 
-                     ;; normal pawn move
-                     ((blanko thing-at-to-square)
-                      (peaceful-pawn-moveo before-board color from-square to-square)))
-                    (board-entryo before-board to-square thing-at-to-square))
-             (simple-board-moveo before-board from-square after-board to-square piece)
-             move-or-capture)))
+                                               ;; normal pawn move
+                                               ((blanko thing-at-to-square)
+                                                (peaceful-pawn-moveo before-board color from-square to-square)))
+                                              (board-entryo before-board to-square thing-at-to-square))
+                                       (simple-board-moveo before-board from-square after-board to-square piece)
+                                       move-or-capture)))
 
-         ;; oh we should write a failing test showing that when moving backwards
-         ;; it might leave a king in check. I think to fix it we'd have to add
-         ;; a safeo clause for the other-color king in the before-position
-         (fresh [enemy-king-at enemy-king]
-                (kingo enemy-king)
-                (coloro other-color enemy-king)
-                (board-entryo before-board enemy-king-at enemy-king)
-                (safeo before-board enemy-king-at color))
+                                   ;; oh we should write a failing test showing that when moving backwards
+                                   ;; it might leave a king in check. I think to fix it we'd have to add
+                                   ;; a safeo clause for the other-color king in the before-position
+                                   (fresh [enemy-king-at enemy-king]
+                                          (kingo enemy-king)
+                                          (coloro other-color enemy-king)
+                                          (board-entryo before-board enemy-king-at enemy-king)
+                                          (safeo before-board enemy-king-at color))
 
-         ;; definitely do this last since it's not relational
-         ;; if necessary we could add a clause that says each of
-         ;; the board entries is something.
-         (fresh [this-king-at this-king]
-                (kingo this-king)
-                (coloro color this-king)
-                (board-entryo after-board this-king-at this-king)
-                (safeo after-board this-king-at other-color))))
+                                   ;; definitely do this last since it's not relational
+                                   ;; if necessary we could add a clause that says each of
+                                   ;; the board entries is something.
+                                   (fresh [this-king-at this-king]
+                                          (kingo this-king)
+                                          (coloro color this-king)
+                                          (board-entryo after-board this-king-at this-king)
+                                          (safeo after-board this-king-at other-color))))))
 
 (defn data->pos
   "Given a user-friendly map of a position, returns a

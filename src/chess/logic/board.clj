@@ -104,6 +104,12 @@
   [sq1 sq2]
   ([[x y] [a b]] (rank-inco b y) (file-inco x a)))
 
+(defmacro fresh-board
+  [name & goals]
+  `(fresh ~sq-syms
+          (let [~name (->Board ~@sq-syms)]
+            (all ~@goals))))
+
 (macrolet [(foo [name]
                 `(fresh ~sq-syms
                         (== ~name ~(cons '->Board sq-syms))))]
