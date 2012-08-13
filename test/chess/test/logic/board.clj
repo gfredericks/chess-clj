@@ -4,17 +4,14 @@
   (:use chess.logic.board
         clojure.core.logic))
 
-(def blank-board (vec (repeat 8 (vec (repeat 8 :_)))))
+(def blank-board (zipmap all-squares (repeat :_)))
 
 (t/deftest board-entry-changeo-test
-  (t/is (= [[:a 1]] (run* [q]
-                        (fresh [x y]
-                               (board-entry-changeo
-                                blank-board
-                                (update-in blank-board [7 0] :K)
-                                q
-                                x
-                                y)))))
-  (t/is (= 64 (count (run* [q] (fresh [a b c d e]
-                                      (board-entry-changeo a b c d e)
-                                      (== q [a b c d e])))))))
+  (t/is (= '(_.0) (run 2 [q] (board-entry-changeo
+                              blank-board
+                              (assoc blank-board [:e 4] :K)
+                              [:e 4]))))
+  (t/is (= () (run 2 [q] (board-entry-changeo
+                          blank-board
+                          (assoc blank-board [:e 4] :K [:e 7] :Q)
+                          [:e 4])))))

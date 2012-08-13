@@ -145,24 +145,26 @@
 ;; attacks
 ;;
 
-(defn- everyo
-  [goal coll]
-  (conde ((emptyo coll))
-         ((fresh [a b]
-                 (firsto coll a)
-                 (resto coll b)
-                 (goal a)
-                 (everyo goal b)))))
+(comment
+  (defn- everyo
+    [goal coll]
+    (conde ((emptyo coll))
+           ((fresh [a b]
+                   (firsto coll a)
+                   (resto coll b)
+                   (goal a)
+                   (everyo goal b))))))
 
-(defn- concrete-boardo
-  [board]
-  (all
-   (boardo board)
-   (everyo (fn [rank] (everyo (fn [entry] (conde ((whiteo entry))
-                                                 ((blacko entry))
-                                                 ((blanko entry))))
-                              rank))
-           board)))
+(comment
+  (defn- concrete-boardo
+    [board]
+    (all
+     (boardo board)
+     (everyo (fn [rank] (everyo (fn [entry] (conde ((whiteo entry))
+                                                   ((blacko entry))
+                                                   ((blanko entry))))
+                                rank))
+             board))))
 
 (defn now [] (System/currentTimeMillis))
 
@@ -191,7 +193,7 @@
   given color."
   [board square attacker-color]
   (all
-   (concrete-boardo board)
+   #_(concrete-boardo board)
    (conda
     ((piece-attacko board attacker-color square) fail)
     (succeed))))
@@ -210,18 +212,19 @@
   [bboard from-square aboard to-square piece]
   (fresh [mid-board foo blank]
          (blanko blank)
+         (boardo mid-board)
+         (board-entryo bboard from-square piece)
+         (board-entryo mid-board from-square blank)
+         (board-entryo aboard from-square blank)
+         (board-entryo aboard to-square piece)
          (board-entry-changeo
           bboard
           mid-board
-          from-square
-          piece
-          blank)
+          from-square)
          (board-entry-changeo
           mid-board
           aboard
-          to-square
-          foo
-          piece)))
+          to-square)))
 
 ;; We might want to add checks that the piece-set is legal? :/
 ;; It is certainly describeable in core.logic but not sure about
@@ -240,6 +243,8 @@
          (== after-pos
              {:turn other-color
               :board after-board})
+         (boardo before-board)
+         (boardo after-board)
          (opposite-coloro color other-color)
          (board-entryo before-board from-square piece)
          (coloro color piece)
@@ -289,7 +294,7 @@
                     (board-entryo before-board to-square thing-at-to-square))
              (simple-board-moveo before-board from-square after-board to-square piece)
              move-or-capture)))
-
+         #_(project [from-square to-square] (log (pr-str [:BEF from-square to-square])))
          ;; oh we should write a failing test showing that when moving backwards
          ;; it might leave a king in check. I think to fix it we'd have to add
          ;; a safeo clause for the other-color king in the before-position
@@ -297,6 +302,7 @@
                 (kingo enemy-king)
                 (coloro other-color enemy-king)
                 (board-entryo before-board enemy-king-at enemy-king)
+                #_(project [from-square to-square] (log (pr-str [:AFT from-square to-square])))
                 (safeo before-board enemy-king-at color))
 
          ;; definitely do this last since it's not relational
@@ -307,8 +313,3 @@
                 (coloro color this-king)
                 (board-entryo after-board this-king-at this-king)
                 (safeo after-board this-king-at other-color))))
-
-
-;;
-;; tmp dev stuff
-;;

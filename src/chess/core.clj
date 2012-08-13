@@ -34,19 +34,32 @@
 
 (def starting-pos (FEN->pos "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"))
 
+(defn board->map
+  [board]
+  (zipmap (for [rank [8 7 6 5 4 3 2 1]
+                file [:a :b :c :d :e :f :g :h]]
+            [file rank])
+          (apply concat board)))
+
+(defn map->board
+  [map]
+  (for [rank [8 7 6 5 4 3 2 1]]
+    (for [file [:a :b :c :d :e :f :g :h]]
+      (map [file rank]))))
+
 (defn moves
   [pos]
-  (run* [q]
-        (fresh [move after-pos]
-               (== q [move after-pos])
-               (legal-moveo (select-keys pos [:board :turn]) move after-pos))))
+  (let [pos (update-in pos [:board] board->map)]
+    (run* [move after-pos]
+          (legal-moveo (select-keys pos [:board :turn]) move after-pos))))
 
 (defn unmoves
   [pos]
-  (run* [q]
-        (fresh [move before-pos]
-               (== q [move before-pos])
-               (legal-moveo before-pos move (select-keys pos [:board :turn])))))
+  (let [pos (update-in pos [:board] board->map)]
+    (run* [q]
+          (fresh [move before-pos]
+                 (== q [move before-pos])
+                 (legal-moveo before-pos move (select-keys pos [:board :turn]))))))
 
 ;;
 ;; search
