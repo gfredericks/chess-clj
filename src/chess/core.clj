@@ -1,56 +1,6 @@
 (ns chess.core
-  (:refer-clojure :exclude [==])
-  (:use [clojure.tools.macro :only [macrolet]]
-        clojure.core.logic
-        chess.logic)
   (:require [clojure.string :as s]))
 
-(defn- vecs
-  [coll]
-  (vec (map vec coll)))
-
-(defn FEN->pos
-  [fen]
-  (let [[board turn castling ep half full] (re-seq #"\S+" fen),
-        board (for [rank (s/split board #"\/")]
-                (mapcat (fn [c] (if (#{\1 \2 \3 \4
-                                       \5 \6 \7 \8} c)
-                                  (-> c str read-string (repeat :_))
-                                  (-> c str keyword list)))
-                        rank))
-        castling (set castling)
-        ep (seq ep)]
-    {:board (vecs board)
-     :turn ({"w" :white "b" :black} turn)
-     :castling {:white {:king (contains? castling \K),
-                        :queen (contains? castling \Q)}
-                :black {:king (contains? castling \k)
-                        :queen (contains? castling \q)}}
-     :en-passant (when-not (= [\-] ep)
-                   (let [[a b] ep]
-                     [(keyword (str a)) (read-string (str b))]))
-     :half-move (read-string half)
-     :full-move (read-string full)}))
-
-(def starting-pos (FEN->pos "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"))
-
-(defn moves
-  [pos]
-  (run* [q]
-        (fresh [move after-pos]
-               (== q [move after-pos])
-               (legal-moveo (select-keys pos [:board :turn]) move after-pos))))
-
-(defn unmoves
-  [pos]
-  (run* [q]
-        (fresh [move before-pos]
-               (== q [move before-pos])
-               (legal-moveo before-pos move (select-keys pos [:board :turn])))))
-
-;;
-;; search
-;;
 
 (defn- legal-piece-set?
   [pieces]

@@ -1,6 +1,4 @@
-(defproject chess "1.0.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :dependencies [[org.clojure/clojure "1.3.0"]
-                 [org.clojure/tools.macro "0.1.1"]
-                 [org.clojure/core.logic "0.7.2"]
-                 [useful "0.8.0"]])
+(defproject com.gfredericks/chess "0.0.1-SNAPSHOT"
+  :description "Okay I am writing this chess thing."
+  :dependencies [[org.clojure/clojure "1.5.1"]]
+  :profiles {:dev {:dependencies [[reiddraper/simple-check "0.5.1"]]}})
