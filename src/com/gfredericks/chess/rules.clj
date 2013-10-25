@@ -72,13 +72,13 @@
 (def pawn-direction {:white 1, :black -1})
 (def pawn-penultimate-row {:white 6, :black 1})
 (defn normal-pawn-moves
-  [board [x y :as sq] color]
+  [board [row col :as sq] color]
   (let [dir (pawn-direction color)
-        +ydir (+ y dir)
-        forward [x +ydir]
-        jump [x (+ +ydir dir)]
-        attack-left [(dec x) +ydir]
-        attack-right [(inc x) +ydir]
+        +rowdir (+ row dir)
+        forward [+rowdir col]
+        jump [(+ +rowdir dir) col]
+        attack-left [+rowdir (dec col)]
+        attack-right [+rowdir (inc col)]
         opponent (other-color color)
 
         applicable-moves
@@ -86,7 +86,7 @@
                 [(if (= :_ (board/get board forward))
                    [sq forward])
                  (if (and (square? jump)
-                          (= y (pawn-start-row color))
+                          (= row (pawn-start-row color))
                           (= :_ (board/get board forward))
                           (= :_ (board/get board jump)))
                    [sq jump])
@@ -96,7 +96,7 @@
                  (if (and (square? attack-right)
                           (= opponent (board/color-at board attack-right)))
                    [sq attack-right])])]
-    (if (= (pawn-penultimate-row color) y)
+    (if (= (pawn-penultimate-row color) row)
       (for [[from to] applicable-moves
             promote-piece (case color :white [:Q :R :B :N] :black [:q :r :b :n])]
         [from to promote-piece])
