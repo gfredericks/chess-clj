@@ -1,7 +1,6 @@
 (ns com.gfredericks.chess.rules-test
   (:require [clojure.test :refer :all]
-            [com.gfredericks.chess.rules :refer :all]
-            [com.gfredericks.chess.position :refer [FEN->pos]]))
+            [com.gfredericks.chess.rules :refer :all]))
 
 #_(deftest normal-games-test
   (doseq [game (parse-pgn (slurp "normal-games.pgn"))]
@@ -19,8 +18,8 @@
                                   a)]))))
 
 (deftest legal-moves-test
-  (let [board #chess/fen-board "r2qk2r/pp3ppp/1npbpnb1/8/3P3N/2N1P1P1/PP2BP1P/R1BQ1RK1"
-        mvs (set (normal-moves board :black))]
+  (let [pos #chess/fen "r2qk2r/pp3ppp/1npbpnb1/8/3P3N/2N1P1P1/PP2BP1P/R1BQ1RK1 b - - 0 1"
+        mvs (set (moves pos))]
     (are [from to] (mvs [(kw->sq from) (kw->sq to)])
          :g6 :b1
          :h7 :h5

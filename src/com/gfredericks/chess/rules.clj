@@ -125,8 +125,20 @@
         mv (normal-moves-for-piece board sq)]
     mv))
 
+(defn castling-moves
+  [board turn {:keys [king queen]}])
+
+(defn en-passant-moves
+  [board turn en-passant-square])
+
+(defn self-checking-move?
+  [board turn move])
+
 (defn moves
   "Returns a list of all the legal moves from this position, ignoring
   the positions' half-move and full-move."
-  [{:keys [board turn castling en-passant]}]
-  )
+  [{:keys [board turn castling en-passant] :as pos}]
+  (->> (concat (normal-moves board turn)
+               (castling-moves board turn (castling turn))
+               (en-passant-moves board turn en-passant))
+       (remove #(self-checking-move? board turn %))))
