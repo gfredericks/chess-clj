@@ -198,6 +198,7 @@
                                     (#{2 -2} (- frow trow)))
                              [(/ (+ frow trow) 2) fcol])
                :turn (other-color turn))
+        ;; TODO: this is wrong; we only inc on non-captures/pawn-moves
         (update-in [:half-move] inc)
         (cond-> (= turn :black)
                 (update-in [:full-move] inc)
