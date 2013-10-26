@@ -24,3 +24,12 @@
          :e6 :f5
          :e8 :c8
          :b7 :b5)))
+
+(def castling-pos
+  #chess/fen "3k4/8/8/8/8/8/8/4K2R w K - 0 1")
+
+(defn kws->move [from to] [(kw->sq from) (kw->sq to)])
+
+(deftest castling-test
+  (testing "You can castle in this position"
+    (is (legal-move? castling-pos (kws->move :e1 :g1)))))

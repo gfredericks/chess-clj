@@ -30,6 +30,18 @@
   (and (<= 0 row 7)
        (<= 0 col 7)))
 
+(defn ^:private move?
+  "Returns true if arg is a valid move data structure."
+  [x]
+  (and (vector? x)
+       (vector? (first x))
+       (vector? (second x))
+       (square? (first x))
+       (square? (second x))
+       (or (= 2 (count x))
+           (and (= 3 (count x))
+                (keyword? (last x))))))
+
 (defn ^:private sqs-in-dir
   "Takes a square and a [dx dy]"
   [sq dir]
@@ -143,7 +155,7 @@
         king-rook-square [castling-row 7]
         attack-free? #(not (attacks? board (other-color turn) %))]
     (if (attack-free? king-square)
-      (remove nil?
+      (filter identity
               [(and queen
                     (attack-free? [castling-row 3])
                     [king-square [castling-row 2]])
@@ -160,7 +172,7 @@
           [left-type left-color] (board/piece-info (board/get board left-sq))
           right-sq [(- row pawn-dir) (inc col)]
           [right-type right-color] (board/piece-info (board/get board right-sq))]
-      (remove nil?
+      (filter identity
               [(and (square? left-sq)
                     (= :pawn left-type)
                     (= turn left-color)
@@ -229,6 +241,7 @@
   "Returns true if the move puts the moving player in check (and is
   thus illegal)."
   [pos move]
+  {:pre [(move? move)]}
   (let [board (-> pos (make-move move) (:board))
         king-square (->> board/all-squares
                          (filter #(= [:king (:turn pos)]
@@ -238,9 +251,13 @@
 
 (defn moves
   "Returns a list of all the legal moves from this position, ignoring
-  the positions' half-move and full-move."
+  the positions' half-move attribute."
   [{:keys [board turn castling en-passant] :as pos}]
   (->> (concat (normal-moves board turn)
                (castling-moves board turn (castling turn))
                (en-passant-moves board turn en-passant))
        (remove #(self-checking-move? pos %))))
+
+(defn legal-move?
+  [pos move]
+  (boolean (some #{move} (moves pos))))
