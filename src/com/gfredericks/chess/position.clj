@@ -38,18 +38,23 @@
        :full-move (read-string full)}
       {:type ::position})))
 
+(defn fen-castling
+  "Returns the castling portion of a fen string."
+  [castling]
+  (let [s (->> [[[:white :king] \K]
+                [[:white :queen] \Q]
+                [[:black :king] \k]
+                [[:black :queen] \q]]
+               (keep #(if (get-in castling (first %)) (second %)))
+               (apply str))]
+    (if (empty? s) "-" s)))
+
 (defn ->fen
   [{:keys [board turn castling en-passant half-move full-move]}]
   (clojure.string/join " "
                        [(board/board->fen-board board)
                         ({:white "w", :black "b"} turn)
-                        (let [s (->> [[[:white :king] \K]
-                                      [[:white :queen] \Q]
-                                      [[:black :king] \k]
-                                      [[:black :queen] \q]]
-                                     (keep #(if (get-in castling (first %)) (second %)))
-                                     (apply str))]
-                          (if (empty? s) "-" s))
+                        (fen-castling castling)
                         (if en-passant
                           (pair->algebraic-square en-passant)
                           "-")
@@ -70,3 +75,14 @@
 (defn set-piece
   [pos sq p]
   (update-in pos [:board] board/set sq p))
+
+(defn print-position
+  [{:keys [board turn castling en-passant half-move full-move]}]
+  (println (apply str (repeat 40 "=")))
+  (board/print-board board)
+  (printf "%d: %s to move\n" full-move (name turn))
+  (printf "(Castling: %s%s)\n"
+          (fen-castling castling)
+          (if en-passant (str ", en passant: " en-passant) ""))
+  (println "half-move:" half-move)
+  (println (apply str (repeat 40 "="))))
