@@ -2,14 +2,6 @@
   (:require [clojure.test :refer :all]
             [com.gfredericks.chess.rules :refer :all]))
 
-#_(deftest normal-games-test
-  (doseq [game (parse-pgn (slurp "normal-games.pgn"))]
-    (loop [pos init-pos, moves (:moves game)]
-      (when-let [[m & more] (seq moves)]
-        (let [new-pos (make-move pos m)]
-          (is new-pos)
-          (recur new-pos more))))))
-
 (defn kw->sq
   [kw]
   (->> kw name seq ((fn [[a b]] [(dec (read-string (str b)))
@@ -32,18 +24,3 @@
          :e6 :f5
          :e8 :c8
          :b7 :b5)))
-
-
-;;
-;; find-game tests
-;;
-
-(comment
-  (deftest find-game-test
-    (is (= [] (find-game starting-pos)))
-    (is (= [{:from [:e 2]
-             :to [:e 4]
-             :promotion '_.0}]
-           (-> "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
-               FEN->pos
-               find-game)))))
