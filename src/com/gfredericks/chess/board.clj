@@ -146,3 +146,11 @@
       (print (apply str (repeat 8 "+---")))
       (println \+)))
   (println (apply str (repeat 33 \-))))
+
+(defn piece-placements
+  "Returns a sequence of tuples: [sq piece]."
+  [board]
+  (for [sq all-squares
+        :let [p (get board sq)]
+        :when (not= p :_)]
+    [sq p]))
