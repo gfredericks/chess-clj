@@ -262,3 +262,20 @@
 (defn legal-move?
   [pos move]
   (boolean (some #{move} (moves pos))))
+
+(defn player-to-move-in-check?
+  [{:keys [turn board]}]
+  (let [player's-king (->> (board/piece-placements board)
+                           (filter (fn [[sq p]]
+                                     (= [:king turn] (board/piece-info p))))
+                           (ffirst))]
+    (attacks? board (other-color turn) player's-king)))
+
+(defn position-status
+  "Returns one of #{:checkmate :stalemate :ongoing}."
+  [pos]
+  (if (empty? (moves pos))
+    (if (player-to-move-in-check? pos)
+      :checkmate
+      :stalemate)
+    :ongoing))
