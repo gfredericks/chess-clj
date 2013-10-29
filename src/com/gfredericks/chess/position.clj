@@ -68,14 +68,6 @@
 
 (def starting-pos (read-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"))
 
-(defn get-piece
-  [pos sq]
-  (-> pos :board (board/get sq)))
-
-(defn set-piece
-  [pos sq p]
-  (update-in pos [:board] board/set sq p))
-
 (defn print-position
   [{:keys [board turn castling en-passant half-move full-move]}]
   (println (apply str (repeat 40 "=")))

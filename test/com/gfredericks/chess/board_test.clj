@@ -1,13 +1,14 @@
 (ns com.gfredericks.chess.board-test
   (:refer-clojure :exclude [get set])
   (:require [com.gfredericks.chess.board :refer :all]
+            [com.gfredericks.chess.squares :as sq]
             [simple-check.core :as sc]
             [simple-check.generators :as gen]
             [simple-check.properties :as prop]
             [simple-check.clojure-test :refer [defspec]]))
 
 (def gen-square
-  (gen/elements all-squares))
+  (gen/elements sq/all-squares))
 
 (def gen-two-different-squares
   (gen/such-that #(not= (first %) (second %))
@@ -22,7 +23,7 @@
       (fn [b [piece sq]]
         (set b sq piece))
       empty-board
-      (map list pieces all-squares)))
+      (map list pieces sq/all-squares)))
    (apply gen/tuple (repeat 64 gen-piece))))
 
 

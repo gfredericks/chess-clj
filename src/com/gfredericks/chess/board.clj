@@ -1,9 +1,7 @@
 (ns com.gfredericks.chess.board
   (:refer-clojure :exclude [get set])
-  (:require [clojure.core :as core]))
-
-(def all-squares
-  (for [row (range 8), col (range 8)] [row col]))
+  (:require [clojure.core :as core]
+            [com.gfredericks.chess.squares :as sq]))
 
 (declare board->fen-board)
 
@@ -61,30 +59,29 @@
 
 (def pieces' (into {} (map (comp vec reverse) pieces)))
 
-(defn indices
-  [row col]
-  [(bit-shift-right row 1)
-   (-> row
-       (bit-and 1)
-       (bit-shift-left 3)
-       (bit-or col)
-       (bit-shift-left 2))])
+(defn ^:private outer-index
+  [^long sq]
+  (bit-shift-right sq 4))
+(defn ^:private inner-index
+  [^long sq]
+  (-> sq
+       (bit-and 15)
+       (bit-shift-left 2)))
 
 (defn get
-  [b [row col]]
-  (let [[outer inner] (indices row col)
-        x (core/get b outer)]
+  [b ^long sq]
+  (let [x (core/get b (outer-index sq))]
     (-> x
-        (bit-shift-right inner)
+        (bit-shift-right (inner-index sq))
         (bit-and 15)
         (pieces'))))
 
 (defn set
-  [b [row col] piece]
+  [b ^long sq piece]
   (let [piece-code (pieces piece)
-        [outer inner] (indices row col)
+        inner (inner-index sq)
         mask (bit-shift-left 15 inner)]
-    (update-in b [outer]
+    (update-in b [(outer-index sq)]
                #(-> %
                     ;; clear the relevant 4 bits
                     (bit-and (bit-not mask))
@@ -104,7 +101,7 @@
                      (let [x (read-string (str c))]
                        (if (number? x)
                          (recur ret (+ i x) more)
-                         (recur (conj ret [(keyword (name x)) [row-num i]])
+                         (recur (conj ret [(keyword (name x)) (sq/square i row-num)])
                                 (inc i)
                                 more)))
                      ret))))))
@@ -123,7 +120,7 @@
   [b]
   (clojure.string/join "/"
                        (for [row-num (range 7 -1 -1)
-                             :let [entries (map #(get b [row-num %]) (range 8))]]
+                             :let [entries (map #(get b (sq/square % row-num)) (range 8))]]
                          (loop [s "", entries entries]
                            (if-let [[e & more] (seq entries)]
                              (if (= :_ e)
@@ -138,7 +135,7 @@
   (doseq [row (range 7 -1 -1)]
     (print \|)
     (doseq [col (range 8)
-            :let [piece (get board [row col])
+            :let [piece (get board (sq/square col row))
                   piece-str (if (= :_ piece) \space (name piece))]]
       (print (str \space piece-str \space \|)))
     (print \newline)
@@ -150,7 +147,7 @@
 (defn piece-placements
   "Returns a sequence of tuples: [sq piece]."
   [board]
-  (for [sq all-squares
+  (for [sq sq/all-squares
         :let [p (get board sq)]
         :when (not= p :_)]
     [sq p]))

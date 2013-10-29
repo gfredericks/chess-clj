@@ -3,7 +3,7 @@
 
   A move is just a [from-square to-square]."
   (:require [com.gfredericks.chess.board :as board]
-            [com.gfredericks.chess.position :refer [get-piece set-piece]]))
+            [com.gfredericks.chess.squares :as sq]))
 
 (def other-color {:white :black, :black :white})
 
@@ -22,32 +22,32 @@
   [[2 1] [1 2] [-2 1] [-1 2] [2 -1] [1 -2] [-2 -1] [-1 -2]])
 
 (defn square+
-  [[x1 y1] [x2 y2]]
-  [(+ x1 x2) (+ y1 y2)])
-
-(defn square?
-  [[row col]]
-  (and (<= 0 row 7)
-       (<= 0 col 7)))
+  "Returns nil if the resulting square is off the board."
+  [[dcol drow] sq]
+  (let [col (+ (sq/col sq) dcol)
+        row (+ (sq/row sq) drow)]
+    (if (and (<= 0 col 7)
+             (<= 0 row 7))
+      (sq/square col row))))
 
 (defn ^:private move?
   "Returns true if arg is a valid move data structure."
   [x]
   (and (vector? x)
-       (vector? (first x))
-       (vector? (second x))
-       (square? (first x))
-       (square? (second x))
+       (number? (first x))
+       (number? (second x))
+       (sq/square? (first x))
+       (sq/square? (second x))
        (or (= 2 (count x))
            (and (= 3 (count x))
                 (keyword? (last x))))))
 
 (defn ^:private sqs-in-dir
-  "Takes a square and a [dx dy]"
+  "Takes a square and a [dcol drow]"
   [sq dir]
   (->> (iterate (partial square+ dir) sq)
        (rest)
-       (take-while square?)))
+       (take-while identity)))
 
 (defn ray-moves
   [directions board sq its-color]
@@ -64,8 +64,8 @@
 (defn king-and-knight-moves
   [dirs board sq color]
   (->> dirs
-       (map (partial square+ sq))
-       (filter square?)
+       (map #(square+ % sq))
+       (filter identity)
        (remove #(= color (board/color-at board %)))
        (map #(vector sq %))))
 
@@ -84,31 +84,30 @@
 (def pawn-direction {:white 1, :black -1})
 (def pawn-penultimate-row {:white 6, :black 1})
 (defn normal-pawn-moves
-  [board [row col :as sq] color]
+  [board sq color]
   (let [dir (pawn-direction color)
-        +rowdir (+ row dir)
-        forward [+rowdir col]
-        jump [(+ +rowdir dir) col]
-        attack-left [+rowdir (dec col)]
-        attack-right [+rowdir (inc col)]
+        forward (sq/translate-row sq dir)
+        jump (sq/translate-row forward dir)
+        attack-left (sq/translate sq dir -1)
+        attack-right (sq/translate sq dir 1)
         opponent (other-color color)
 
         applicable-moves
         (remove nil?
                 [(if (= :_ (board/get board forward))
                    [sq forward])
-                 (if (and (square? jump)
-                          (= row (pawn-start-row color))
+                 (if (and jump
+                          (= (sq/row sq) (pawn-start-row color))
                           (= :_ (board/get board forward))
                           (= :_ (board/get board jump)))
                    [sq jump])
-                 (if (and (square? attack-left)
+                 (if (and attack-left
                           (= opponent (board/color-at board attack-left)))
                    [sq attack-left])
-                 (if (and (square? attack-right)
+                 (if (and attack-right
                           (= opponent (board/color-at board attack-right)))
                    [sq attack-right])])]
-    (if (= (pawn-penultimate-row color) row)
+    (if (= (pawn-penultimate-row color) (sq/row sq))
       (for [[from to] applicable-moves
             promote-piece (case color :white [:Q :R :B :N] :black [:q :r :b :n])]
         [from to promote-piece])
@@ -132,7 +131,7 @@
 
 (defn normal-moves
   [board color-to-move]
-  (for [sq board/all-squares
+  (for [sq sq/all-squares
         :when (= color-to-move (board/color-at board sq))
         mv (normal-moves-for-piece board sq)]
     mv))
@@ -145,41 +144,42 @@
                (and (= to-square square)
                     ;; not a forward pawn move
                     (not (and (= :pawn (board/piece-type (board/get board from-square)))
-                              (= (second from-square) (second to-square)))))))))
+                              (= (sq/col from-square) (sq/col to-square)))))))))
 
 (defn castling-moves
   [board turn {:keys [king queen]}]
   (let [castling-row (case turn :white 0 :black 7)
-        king-square [castling-row 4]
-        queen-rook-square [castling-row 0]
-        king-rook-square [castling-row 7]
+        king-square (sq/square 4 castling-row)
+        queen-hop-square (sq/square 3 castling-row)
+        king-hop-square (sq/square 5 castling-row)
         attack-free? #(not (attacks? board (other-color turn) %))]
     (if (attack-free? king-square)
       (filter identity
               [(and queen
-                    (attack-free? [castling-row 3])
-                    [king-square [castling-row 2]])
+                    (attack-free? queen-hop-square)
+                    [king-square (sq/square 2 castling-row)])
                (and king
-                    (attack-free? [castling-row 5])
-                    [king-square [castling-row 6]])]))))
+                    (attack-free? king-hop-square)
+                    [king-square (sq/square 6 castling-row)])]))))
 
 (defn en-passant-moves
   [board turn en-passant-square]
-  (if-let [[row col] en-passant-square]
-    (let [pawn-dir (case turn :white 1 :black -1)
-          [row col] en-passant-square
-          left-sq [(- row pawn-dir) (dec col)]
+  (if en-passant-square
+    (let [row (sq/row en-passant-square)
+          col (sq/col en-passant-square)
+          anti-pawn-dir (case turn :white -1 :black 1)
+          left-sq (sq/translate en-passant-square anti-pawn-dir -1)
           [left-type left-color] (board/piece-info (board/get board left-sq))
-          right-sq [(- row pawn-dir) (inc col)]
+          right-sq (sq/translate en-passant-square anti-pawn-dir 1)
           [right-type right-color] (board/piece-info (board/get board right-sq))]
       (filter identity
-              [(and (square? left-sq)
-                    (= :pawn left-type)
-                    (= turn left-color)
+              [(and left-sq
+                    (= :pawn (board/piece-type (board/get board left-sq)))
+                    (= turn (board/piece-color (board/get board left-sq)))
                     [left-sq en-passant-square])
-               (and (square? right-sq)
-                    (= :pawn right-type)
-                    (= turn right-color)
+               (and right-sq
+                    (= :pawn (board/piece-type (board/get board right-sq)))
+                    (= turn (board/piece-color (board/get board right-sq)))
                     [right-sq en-passant-square])]))))
 
 (defn make-move
@@ -189,14 +189,16 @@
                    (board/set from-square :_)
                    (board/set to-square (or promotion (board/get board from-square))))
         piece-moved (board/piece-type (board/get board from-square))
-        [frow fcol] from-square
-        [trow tcol] to-square]
+        frow (sq/row from-square)
+        fcol (sq/col from-square)
+        trow (sq/row to-square)
+        tcol (sq/col to-square)]
     (-> pos
         (assoc :board board'
                ;; set en-passant on pawn jump
                :en-passant (if (and (= :pawn piece-moved)
                                     (#{2 -2} (- frow trow)))
-                             [(/ (+ frow trow) 2) fcol])
+                             (sq/square fcol (/ (+ frow trow) 2)))
                :turn (other-color turn))
         ;; TODO: this is wrong; we only inc on non-captures/pawn-moves
         (update-in [:half-move] inc)
@@ -209,10 +211,12 @@
                 (update-in [:board]
                            (fn [board']
                              (let [left? (= 2 tcol)
+
                                    old-rook-square
-                                   [frow (if left? 0 7)]
+                                   (sq/square (if left? 0 7) frow)
+
                                    new-rook-square
-                                   [frow (if left? 3 5)]]
+                                   (sq/square (if left? 3 5) frow)]
                                (-> board'
                                    (board/set old-rook-square :_)
                                    (board/set new-rook-square
@@ -224,7 +228,7 @@
                 (update-in [:board]
                            (fn [board']
                              (let [pawn-dir (case turn :white 1 :black -1)
-                                   capture-square [(- trow pawn-dir) tcol]]
+                                   capture-square (sq/square tcol (- trow pawn-dir))]
                                (board/set board' capture-square :_))))
 
                 ;; set castling on king/rook moves
@@ -233,9 +237,9 @@
 
                 (= :rook piece-moved)
                 (cond->
-                 (= from-square [(case turn :white 0 :black 7) 0])
+                 (= from-square (sq/square 0 (case turn :white 0 :black 7)))
                  (assoc-in [:castling turn :queen] false)
-                 (= from-square [(case turn :white 0 :black 7) 7])
+                 (= from-square (sq/square 7 (case turn :white 0 :black 7)))
                  (assoc-in [:castling turn :king] false))))))
 
 (defn self-checking-move?
@@ -244,7 +248,7 @@
   [pos move]
   {:pre [(move? move)]}
   (let [board (-> pos (make-move move) (:board))
-        king-square (->> board/all-squares
+        king-square (->> sq/all-squares
                          (filter #(= [:king (:turn pos)]
                                      (board/piece-info (board/get board %))))
                          (first))]
