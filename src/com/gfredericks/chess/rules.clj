@@ -3,6 +3,7 @@
 
   A move is just a [from-square to-square]."
   (:require [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.position] ;; need this for data readers
             [com.gfredericks.chess.squares :as sq]))
 
 (def other-color {:white :black, :black :white})
@@ -21,15 +22,6 @@
 (def knight-moves
   [[2 1] [1 2] [-2 1] [-1 2] [2 -1] [1 -2] [-2 -1] [-1 -2]])
 
-(defn square+
-  "Returns nil if the resulting square is off the board."
-  [[dcol drow] sq]
-  (let [col (+ (sq/col sq) dcol)
-        row (+ (sq/row sq) drow)]
-    (if (and (<= 0 col 7)
-             (<= 0 row 7))
-      (sq/square col row))))
-
 (defn ^:private move?
   "Returns true if arg is a valid move data structure."
   [x]
@@ -44,8 +36,8 @@
 
 (defn ^:private sqs-in-dir
   "Takes a square and a [dcol drow]"
-  [sq dir]
-  (->> (iterate (partial square+ dir) sq)
+  [sq [dcol drow]]
+  (->> (iterate #(sq/translate % drow dcol) sq)
        (rest)
        (take-while identity)))
 
@@ -64,7 +56,8 @@
 (defn king-and-knight-moves
   [dirs board sq color]
   (->> dirs
-       (map #(square+ % sq))
+       (map (fn [[dcol drow]]
+              (sq/translate sq drow dcol)))
        (filter identity)
        (remove #(= color (board/color-at board %)))
        (map #(vector sq %))))
@@ -114,26 +107,23 @@
       applicable-moves)))
 
 (defn normal-moves-for-piece
-  [board sq]
-  (let [[type color] (-> board
-                         (board/get sq)
-                         (board/piece-info))]
-    ((case type
-       :king normal-king-moves
-       :queen normal-queen-moves
-       :rook normal-rook-moves
-       :bishop normal-bishop-moves
-       :knight normal-knight-moves
-       :pawn normal-pawn-moves)
-     board
-     sq
-     color)))
+  [board piece color sq]
+  ((case (board/piece-type piece)
+     :king normal-king-moves
+     :queen normal-queen-moves
+     :rook normal-rook-moves
+     :bishop normal-bishop-moves
+     :knight normal-knight-moves
+     :pawn normal-pawn-moves)
+   board
+   sq
+   color))
 
 (defn normal-moves
   [board color-to-move]
-  (for [sq sq/all-squares
-        :when (= color-to-move (board/color-at board sq))
-        mv (normal-moves-for-piece board sq)]
+  (for [[sq p] (board/piece-placements board)
+        :when (= color-to-move (board/piece-color p))
+        mv (normal-moves-for-piece board p color-to-move sq)]
     mv))
 
 (defn attacks?

@@ -147,7 +147,15 @@
 (defn piece-placements
   "Returns a sequence of tuples: [sq piece]."
   [board]
-  (for [sq sq/all-squares
-        :let [p (get board sq)]
-        :when (not= p :_)]
-    [sq p]))
+  (loop [ret (transient [])
+         outer-index 0
+         inner-index 0
+         outer-i 1
+         ^long x (core/get board 0)]
+    (if (= 16 inner-index)
+      (if (= 4 outer-i)
+        (persistent! ret)
+        (recur ret (+ outer-index 16) 0 (inc outer-i) (core/get board outer-i)))
+      (let [p (bit-and x 15)
+            ret' (if (zero? p) ret (conj! ret [(+ outer-index inner-index) (pieces' p)]))]
+        (recur ret' outer-index (inc inner-index) outer-i (bit-shift-right x 4))))))

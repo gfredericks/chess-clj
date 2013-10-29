@@ -58,6 +58,7 @@
       (+ sq delta))))
 
 (defn translate
-  [^long sq row col]
-  (if-let [sq' (translate-row sq row)]
-    (translate-col sq' col)))
+  "Returns nil if the resulting square is off the board."
+  [^long sq drow dcol]
+  (if-let [sq' (translate-row sq drow)]
+    (translate-col sq' dcol)))
