@@ -159,9 +159,14 @@
           col (sq/col en-passant-square)
           anti-pawn-dir (case turn :white -1 :black 1)
           left-sq (sq/translate en-passant-square anti-pawn-dir -1)
-          [left-type left-color] (board/piece-info (board/get board left-sq))
+
+          [left-type left-color]
+          (if left-sq (board/piece-info (board/get board left-sq)))
+
           right-sq (sq/translate en-passant-square anti-pawn-dir 1)
-          [right-type right-color] (board/piece-info (board/get board right-sq))]
+
+          [right-type right-color]
+          (if right-sq (board/piece-info (board/get board right-sq)))]
       (filter identity
               [(and left-sq
                     (= :pawn (board/piece-type (board/get board left-sq)))

@@ -121,10 +121,24 @@
                           [b2 b3]
                           [h4 h3]
                           [b3 b4])]
-      (is (not (legal-move? pos [c4 b3]))))))
+      (is (not (legal-move? pos [c4 b3])))))
+  (testing "En-passant works at the edge of the board"
+    (let [pos #chess/fen "3k4/8/8/8/1p6/8/P7/4K3 w K - 0 1"
+          move-1 [a2 a4]
+          move-2 [b4 a3]]
+      (is (legal-move? pos move-1))
+      (let [pos' (make-move pos move-1)]
+        (is (legal-move? pos' move-2))
+        (is (= :P (board/get (:board pos') a4)))
+        (let [pos'' (make-move pos move-2)]
+          (is (= :_ (board/get (:board pos'') a4))))))))
 
 
 ;; Moar tests:
 ;; - test various kinds of check, and how your move choices in
 ;;   a complex position become vastly fewer
+;; - test the initial position
+;; - test en-passant on the boundary
 ;; - test promotions
+;; - test repeatedly making random moves?
+;;   - only after adding a half-move counter
