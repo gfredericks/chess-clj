@@ -66,7 +66,7 @@
   (.write w "#chess/fen ")
   (print-method (->fen pos) w))
 
-(def starting-pos (read-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"))
+(def initial (read-fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"))
 
 (defn print-position
   [{:keys [board turn castling en-passant half-move full-move]}]

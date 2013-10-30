@@ -146,9 +146,11 @@
     (if (attack-free? king-square)
       (filter identity
               [(and queen
+                    (= :_ (board/get board queen-hop-square))
                     (attack-free? queen-hop-square)
                     [king-square (sq/square 2 castling-row)])
                (and king
+                    (= :_ (board/get board king-hop-square))
                     (attack-free? king-hop-square)
                     [king-square (sq/square 6 castling-row)])]))))
 
