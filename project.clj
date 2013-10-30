@@ -1,4 +1,4 @@
-(defproject com.gfredericks/chess "0.0.2"
+(defproject com.gfredericks/chess "0.0.3"
   :description "Okay I am writing this chess thing."
   :dependencies [[org.clojure/clojure "1.5.1"]]
   :profiles {:dev {:dependencies [[criterium "0.4.2"]
