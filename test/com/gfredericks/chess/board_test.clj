@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [get set])
   (:require [com.gfredericks.chess.board :refer :all]
             [com.gfredericks.chess.squares :as sq]
-            [simple-check.core :as sc]
             [simple-check.generators :as gen]
             [simple-check.properties :as prop]
             [simple-check.clojure-test :refer [defspec]]))
