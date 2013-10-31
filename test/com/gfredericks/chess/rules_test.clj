@@ -4,7 +4,10 @@
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.position :as position]
             [com.gfredericks.chess.rules :refer :all]
-            [com.gfredericks.chess.squares :refer :all]))
+            [com.gfredericks.chess.squares :refer :all]
+            [simple-check.generators :as gen]
+            [simple-check.properties :as prop]
+            [simple-check.clojure-test :refer [defspec]]))
 
 (deftest starting-position-test
   (is (= (set (moves position/initial))
@@ -153,10 +156,28 @@
         (let [pos'' (make-move pos move-2)]
           (is (= :_ (board/get (:board pos'') a4))))))))
 
+(defn rand-nth'
+  [^java.util.Random r coll]
+  (nth coll
+       (.nextInt r (count coll))))
+
+(defspec play-a-random-game 10
+  ;; Haxy way to do this: generate a thousand random numbers
+  ;; and use those for seeds to select moves
+  (prop/for-all [seeds (apply gen/tuple
+                              (repeat 1000 (gen/choose 0 1000000)))]
+    (loop [pos position/initial
+           [seed & more] seeds]
+      (let [moves (cond->> (moves pos)
+                           (= 50 (:half-move pos))
+                           (filter #(progressive-move? pos %)))]
+        (if (empty? moves)
+          :cool
+          (let [move (rand-nth' (java.util.Random. seed) moves)]
+            (recur (make-move pos move) more)))))))
+
 
 ;; Moar tests:
 ;; - test various kinds of check, and how your move choices in
 ;;   a complex position become vastly fewer
 ;; - test promotions
-;; - test repeatedly making random moves?
-;;   - only after adding a half-move counter
