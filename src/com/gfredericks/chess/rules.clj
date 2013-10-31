@@ -54,12 +54,16 @@
         move-to move-tos]
     [sq move-to]))
 
-(defn king-and-knight-moves
-  [dirs board sq color]
+(defn king-and-knight-squares
+  [dirs sq]
   (->> dirs
        (map (fn [[dcol drow]]
               (sq/translate sq drow dcol)))
-       (filter identity)
+       (filter identity)))
+
+(defn king-and-knight-moves
+  [dirs board sq color]
+  (->> (king-and-knight-squares dirs sq)
        (remove #(pieces/color? color (board/get board %)))
        (map #(vector sq %))))
 
@@ -186,13 +190,17 @@
   (or (pieces/pawn? (board/get board from-square))
       (not (pieces/blank? (board/get board to-square)))))
 
+(defn make-move-board
+  [board [from-square to-square promotion]]
+  (-> board
+      (board/set from-square :_)
+      (board/set to-square (or promotion (board/get board from-square)))))
+
 (defn make-move
   "Woah man is this gonna be a workhorse."
   [{:keys [board turn en-passant castling half-move] :as pos}
    [from-square to-square promotion :as move]]
-  (let [board' (-> board
-                   (board/set from-square :_)
-                   (board/set to-square (or promotion (board/get board from-square))))
+  (let [board' (make-move-board board move)
         piece-moved (pieces/piece-type (board/get board from-square))
         frow (sq/row from-square)
         fcol (sq/col from-square)
@@ -248,26 +256,129 @@
                  (= from-square (sq/square 7 (case turn :white 0 :black 7)))
                  (assoc-in [:castling turn :king] false))))))
 
-(defn self-checking-move?
-  "Returns true if the move puts the moving player in check (and is
-  thus illegal)."
-  [pos move]
-  {:pre [(move? move)]}
-  (let [board (-> pos (make-move move) (:board))
-        king-square (->> sq/all-squares
-                         (filter #(= [:king (:turn pos)]
-                                     (pieces/piece-info (board/get board %))))
-                         (first))]
-    (attacks? board (other-color (:turn pos)) king-square)))
+(defn ^:private king-checker
+  [sq]
+  (let [sqs (set (king-and-knight-squares all-standard-movements sq))]
+    (fn [board sq] (sqs sq))))
+
+(defn ^:private knight-checker
+  [sq]
+  (let [sqs (set (king-and-knight-squares knight-moves sq))]
+    (fn [board sq] (sqs sq))))
+
+(def rowcol (juxt sq/row sq/col))
+(defn dirtype
+  "Returns [dcol drow] if the relationship between the squares is rectilinear
+  or diagonal. Assumes they are not equal."
+  [sq1 sq2]
+  (let [row1 (sq/row sq1)
+        row2 (sq/row sq2)
+        col1 (sq/col sq1)
+        col2 (sq/col sq2)
+        d-row (- row2 row1)
+        d-col (- col2 col1)
+        abs #(* % (Long/signum %))]
+    (if (or (= (abs d-row) (abs d-col))
+            (zero? d-row)
+            (zero? d-col))
+      [(Long/signum d-col) (Long/signum d-row)])))
+
+(defn ^:private check-dir
+  [board sq1 sq2 dir]
+  (loop [[sq & more] (sqs-in-dir sq1 dir)]
+    (cond (= sq sq2) true
+          (pieces/blank? (board/get board sq)) (recur more)
+          :else false)))
+
+(defn ^:private queen-checker
+  [sq]
+  (fn [board sq']
+    (if-let [dir (dirtype sq sq')]
+      (check-dir board sq sq' dir))))
+
+(defn ^:private rook-checker
+  [sq]
+  (fn [board sq']
+    (if-let [[dcol drow :as dir] (dirtype sq sq')]
+      (if (or (zero? dcol) (zero? drow))
+        (check-dir board sq sq' dir)))))
+
+(defn ^:private bishop-checker
+  [sq]
+  (fn [board sq']
+    (if-let [[dcol drow :as dir] (dirtype sq sq')]
+      (if (not (or (zero? dcol) (zero? drow)))
+        (check-dir board sq sq' dir)))))
+
+(defn ^:private pawn-checker
+  [sq piece-color]
+  (let [drow (case piece-color :white 1 :black -1)
+        sqs (->> [1 -1]
+                 (map (fn [dcol] (sq/translate sq drow dcol)))
+                 (filter identity)
+                 (set))]
+    (fn [board sq'] (sqs sq'))))
+
+(defn ^:private check-checker-piece
+  [board sq piece]
+  (let [piece-type (pieces/piece-type piece)
+        checker (if (= :pawn piece-type)
+                  (pawn-checker sq (pieces/piece-color piece))
+                  ((case piece-type
+                       :king king-checker
+                       :queen queen-checker
+                       :rook rook-checker
+                       :bishop bishop-checker
+                       :knight knight-checker)
+                   sq))]
+    (fn [board' sq']
+      ;; make sure the piece is still there; if not it has
+      ;; presumably been captured
+      (if (= piece (board/get board' sq))
+        (checker board' sq')))))
+
+(defn some-fn'
+  "Like some-fn but does something sane for multiple-arg functions."
+  [& fs]
+  (fn [& args]
+    (some #(apply % args) fs)))
+
+(defn ^:private check-checker
+  "Returns a function
+    (fn [board' sq]) => bool
+  that expects a board that is similar to the given board, such that
+  none of the attacking pieces have moved (though they may have been
+  captured), and returns a boolean indicating if the given square is
+  under attack."
+  [board attacking-player]
+  (->> (board/piece-placements board)
+       (filter #(pieces/color? attacking-player (second %)))
+       (map (fn [[sq piece]] (check-checker-piece board sq piece)))
+       (apply some-fn')))
+
+(defn king-square
+  "Returns the square on which is the given color's king."
+  [board color]
+  (->> (board/piece-placements board)
+       (filter (fn [[sq p]]
+                 (= [:king color] (pieces/piece-info p))))
+       (ffirst)))
 
 (defn moves
   "Returns a list of all the legal moves from this position, ignoring
   the positions' half-move attribute."
   [{:keys [board turn castling en-passant] :as pos}]
-  (->> (concat (normal-moves board turn)
-               (castling-moves board turn (castling turn))
-               (en-passant-moves board turn en-passant))
-       (remove #(self-checking-move? pos %))))
+  ;; the checker is a pre-optimized (for this position) function for
+  ;; determining if a move puts the moving player in check.
+  (let [checker (check-checker board (other-color turn))
+        king-sq (king-square board turn)]
+    (->> (concat (normal-moves board turn)
+                 (castling-moves board turn (castling turn))
+                 (en-passant-moves board turn en-passant))
+         (remove (fn [[from to :as move]]
+                   (let [board' (make-move-board board move)
+                         king-sq' (if (= from king-sq) to king-sq)]
+                     (checker board' king-sq')))))))
 
 (defn legal-move?
   [pos move]
@@ -275,11 +386,7 @@
 
 (defn player-to-move-in-check?
   [{:keys [turn board]}]
-  (let [player's-king (->> (board/piece-placements board)
-                           (filter (fn [[sq p]]
-                                     (= [:king turn] (pieces/piece-info p))))
-                           (ffirst))]
-    (attacks? board (other-color turn) player's-king)))
+  (attacks? board (other-color turn) (king-square board turn)))
 
 (defn position-status
   "Returns one of #{:checkmate :stalemate :ongoing}."
