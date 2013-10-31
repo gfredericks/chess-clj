@@ -3,6 +3,7 @@
 
   A move is just a [from-square to-square]."
   (:require [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.pieces :as pieces]
             [com.gfredericks.chess.position] ;; need this for data readers
             [com.gfredericks.chess.squares :as sq]))
 
@@ -48,7 +49,7 @@
               [blanks more] (split-with #(= :_ (board/get board %)) sqs)
               move-tos (cond-> blanks
                                (if-let [sq (first more)]
-                                 (not= its-color (board/color-at board sq)))
+                                 (not= its-color (pieces/piece-color (board/get board sq))))
                                (conj (first more)))]
         move-to move-tos]
     [sq move-to]))
@@ -59,7 +60,7 @@
        (map (fn [[dcol drow]]
               (sq/translate sq drow dcol)))
        (filter identity)
-       (remove #(= color (board/color-at board %)))
+       (remove #(= color (pieces/piece-color (board/get board %))))
        (map #(vector sq %))))
 
 (def normal-king-moves
@@ -95,10 +96,10 @@
                           (= :_ (board/get board jump)))
                    [sq jump])
                  (if (and attack-left
-                          (= opponent (board/color-at board attack-left)))
+                          (= opponent (pieces/piece-color (board/get board attack-left))))
                    [sq attack-left])
                  (if (and attack-right
-                          (= opponent (board/color-at board attack-right)))
+                          (= opponent (pieces/piece-color (board/get board attack-right))))
                    [sq attack-right])])]
     (if (= (pawn-penultimate-row color) (sq/row sq))
       (for [[from to] applicable-moves
@@ -108,7 +109,7 @@
 
 (defn normal-moves-for-piece
   [board piece color sq]
-  ((case (board/piece-type piece)
+  ((case (pieces/piece-type piece)
      :king normal-king-moves
      :queen normal-queen-moves
      :rook normal-rook-moves
@@ -122,7 +123,7 @@
 (defn normal-moves
   [board color-to-move]
   (for [[sq p] (board/piece-placements board)
-        :when (= color-to-move (board/piece-color p))
+        :when (= color-to-move (pieces/piece-color p))
         mv (normal-moves-for-piece board p color-to-move sq)]
     mv))
 
@@ -133,7 +134,7 @@
        (some (fn [[from-square to-square]]
                (and (= to-square square)
                     ;; not a forward pawn move
-                    (not (and (= :pawn (board/piece-type (board/get board from-square)))
+                    (not (and (= :pawn (pieces/piece-type (board/get board from-square)))
                               (= (sq/col from-square) (sq/col to-square)))))))))
 
 (defn castling-moves
@@ -163,29 +164,36 @@
           left-sq (sq/translate en-passant-square anti-pawn-dir -1)
 
           [left-type left-color]
-          (if left-sq (board/piece-info (board/get board left-sq)))
+          (if left-sq (pieces/piece-info (board/get board left-sq)))
 
           right-sq (sq/translate en-passant-square anti-pawn-dir 1)
 
           [right-type right-color]
-          (if right-sq (board/piece-info (board/get board right-sq)))]
+          (if right-sq (pieces/piece-info (board/get board right-sq)))]
       (filter identity
               [(and left-sq
-                    (= :pawn (board/piece-type (board/get board left-sq)))
-                    (= turn (board/piece-color (board/get board left-sq)))
+                    (= :pawn (pieces/piece-type (board/get board left-sq)))
+                    (= turn (pieces/piece-color (board/get board left-sq)))
                     [left-sq en-passant-square])
                (and right-sq
-                    (= :pawn (board/piece-type (board/get board right-sq)))
-                    (= turn (board/piece-color (board/get board right-sq)))
+                    (= :pawn (pieces/piece-type (board/get board right-sq)))
+                    (= turn (pieces/piece-color (board/get board right-sq)))
                     [right-sq en-passant-square])]))))
+
+(defn progressive-move?
+  "Returns true if the move is a capture or a pawn move"
+  [{:keys [board]} [from-square to-square]]
+  (or (= :pawn (pieces/piece-type (board/get board from-square)))
+      (not= :_ (board/get board to-square))))
 
 (defn make-move
   "Woah man is this gonna be a workhorse."
-  [{:keys [board turn en-passant castling] :as pos} [from-square to-square promotion]]
+  [{:keys [board turn en-passant castling half-move] :as pos}
+   [from-square to-square promotion :as move]]
   (let [board' (-> board
                    (board/set from-square :_)
                    (board/set to-square (or promotion (board/get board from-square))))
-        piece-moved (board/piece-type (board/get board from-square))
+        piece-moved (pieces/piece-type (board/get board from-square))
         frow (sq/row from-square)
         fcol (sq/col from-square)
         trow (sq/row to-square)
@@ -196,9 +204,10 @@
                :en-passant (if (and (= :pawn piece-moved)
                                     (#{2 -2} (- frow trow)))
                              (sq/square fcol (/ (+ frow trow) 2)))
-               :turn (other-color turn))
-        ;; TODO: this is wrong; we only inc on non-captures/pawn-moves
-        (update-in [:half-move] inc)
+               :turn (other-color turn)
+               :half-move (if (progressive-move? pos move)
+                            0
+                            (inc half-move)))
         (cond-> (= turn :black)
                 (update-in [:full-move] inc)
 
@@ -247,7 +256,7 @@
   (let [board (-> pos (make-move move) (:board))
         king-square (->> sq/all-squares
                          (filter #(= [:king (:turn pos)]
-                                     (board/piece-info (board/get board %))))
+                                     (pieces/piece-info (board/get board %))))
                          (first))]
     (attacks? board (other-color (:turn pos)) king-square)))
 
@@ -268,7 +277,7 @@
   [{:keys [turn board]}]
   (let [player's-king (->> (board/piece-placements board)
                            (filter (fn [[sq p]]
-                                     (= [:king turn] (board/piece-info p))))
+                                     (= [:king turn] (pieces/piece-info p))))
                            (ffirst))]
     (attacks? board (other-color turn) player's-king)))
 

@@ -27,36 +27,6 @@
    :n 11
    :p 12})
 
-(def piece-color
-  {:K :white
-   :Q :white
-   :R :white
-   :B :white
-   :N :white
-   :P :white
-   :k :black
-   :q :black
-   :r :black
-   :b :black
-   :n :black
-   :p :black})
-
-(def piece-type
-  {:K :king
-   :Q :queen
-   :R :rook
-   :B :bishop
-   :N :knight
-   :P :pawn
-   :k :king
-   :q :queen
-   :r :rook
-   :b :bishop
-   :n :knight
-   :p :pawn})
-
-(def piece-info (juxt piece-type piece-color))
-
 (def pieces' (into {} (map (comp vec reverse) pieces)))
 
 (defn ^:private outer-index
@@ -87,8 +57,6 @@
                     (bit-and (bit-not mask))
                     ;; insert the piece-code
                     (bit-or (bit-shift-left piece-code inner))))))
-
-(def color-at (comp piece-color get))
 
 (defn ^:private fen-board->piece-locations
   "Returns a sequence of [piece square] tuples."
@@ -131,18 +99,19 @@
 
 (defn print-board
   [board]
-  (println (apply str (repeat 33 \_)))
+  (println " " (apply str (repeat 33 \-)))
   (doseq [row (range 7 -1 -1)]
-    (print \|)
+    (print (inc row) \|)
     (doseq [col (range 8)
             :let [piece (get board (sq/square col row))
                   piece-str (if (= :_ piece) \space (name piece))]]
       (print (str \space piece-str \space \|)))
     (print \newline)
     (when (pos? row)
-      (print (apply str (repeat 8 "+---")))
+      (print (apply str "  " (repeat 8 "+---")))
       (println \+)))
-  (println (apply str (repeat 33 \-))))
+  (println (apply str "  " (repeat 33 \-)))
+  (println "   " (apply str (for [x "abcdefgh"] (str x "   ")))))
 
 (defn piece-placements
   "Returns a sequence of tuples: [sq piece]."
