@@ -14,6 +14,10 @@
    :n :black
    :p :black})
 
+(defn color?
+  [color piece]
+  (= color (piece-color piece)))
+
 (def piece-type
   {:K :king
    :Q :queen
@@ -27,5 +31,13 @@
    :b :bishop
    :n :knight
    :p :pawn})
+
+(defn pawn?
+  [p]
+  (case p :P true :p true false))
+
+(defn blank?
+  [p]
+  (= :_ p))
 
 (def piece-info (juxt piece-type piece-color))

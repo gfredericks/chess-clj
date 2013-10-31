@@ -49,7 +49,7 @@
               [blanks more] (split-with #(= :_ (board/get board %)) sqs)
               move-tos (cond-> blanks
                                (if-let [sq (first more)]
-                                 (not= its-color (pieces/piece-color (board/get board sq))))
+                                 (not (pieces/color? its-color (board/get board sq))))
                                (conj (first more)))]
         move-to move-tos]
     [sq move-to]))
@@ -60,7 +60,7 @@
        (map (fn [[dcol drow]]
               (sq/translate sq drow dcol)))
        (filter identity)
-       (remove #(= color (pieces/piece-color (board/get board %))))
+       (remove #(pieces/color? color (board/get board %)))
        (map #(vector sq %))))
 
 (def normal-king-moves
@@ -96,10 +96,10 @@
                           (= :_ (board/get board jump)))
                    [sq jump])
                  (if (and attack-left
-                          (= opponent (pieces/piece-color (board/get board attack-left))))
+                          (pieces/color? opponent (board/get board attack-left)))
                    [sq attack-left])
                  (if (and attack-right
-                          (= opponent (pieces/piece-color (board/get board attack-right))))
+                          (pieces/color? opponent (board/get board attack-right)))
                    [sq attack-right])])]
     (if (= (pawn-penultimate-row color) (sq/row sq))
       (for [[from to] applicable-moves
@@ -123,7 +123,7 @@
 (defn normal-moves
   [board color-to-move]
   (for [[sq p] (board/piece-placements board)
-        :when (= color-to-move (pieces/piece-color p))
+        :when (pieces/color? color-to-move p)
         mv (normal-moves-for-piece board p color-to-move sq)]
     mv))
 
@@ -134,7 +134,7 @@
        (some (fn [[from-square to-square]]
                (and (= to-square square)
                     ;; not a forward pawn move
-                    (not (and (= :pawn (pieces/piece-type (board/get board from-square)))
+                    (not (and (pieces/pawn? (board/get board from-square))
                               (= (sq/col from-square) (sq/col to-square)))))))))
 
 (defn castling-moves
@@ -172,19 +172,19 @@
           (if right-sq (pieces/piece-info (board/get board right-sq)))]
       (filter identity
               [(and left-sq
-                    (= :pawn (pieces/piece-type (board/get board left-sq)))
+                    (pieces/pawn? (board/get board left-sq))
                     (= turn (pieces/piece-color (board/get board left-sq)))
                     [left-sq en-passant-square])
                (and right-sq
-                    (= :pawn (pieces/piece-type (board/get board right-sq)))
+                    (pieces/pawn? (board/get board right-sq))
                     (= turn (pieces/piece-color (board/get board right-sq)))
                     [right-sq en-passant-square])]))))
 
 (defn progressive-move?
   "Returns true if the move is a capture or a pawn move"
   [{:keys [board]} [from-square to-square]]
-  (or (= :pawn (pieces/piece-type (board/get board from-square)))
-      (not= :_ (board/get board to-square))))
+  (or (pieces/pawn? (board/get board from-square))
+      (not (pieces/blank? (board/get board to-square)))))
 
 (defn make-move
   "Woah man is this gonna be a workhorse."
