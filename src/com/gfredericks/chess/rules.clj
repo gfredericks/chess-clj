@@ -3,6 +3,7 @@
 
   A move is just a [from-square to-square]."
   (:require [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]
             [com.gfredericks.chess.position] ;; need this for data readers
             [com.gfredericks.chess.squares :as sq]))
@@ -44,15 +45,19 @@
 
 (defn ray-moves
   [directions board sq its-color]
-  (for [dir directions
-        :let [sqs (sqs-in-dir sq dir)
-              [blanks more] (split-with #(= :_ (board/get board %)) sqs)
-              move-tos (cond-> blanks
-                               (if-let [sq (first more)]
-                                 (not (pieces/color? its-color (board/get board sq))))
-                               (conj (first more)))]
-        move-to move-tos]
-    [sq move-to]))
+  (mapcat (fn [dir]
+            (let [sqs (sqs-in-dir sq dir)
+                  [blanks [maybe-piece]] (split-with #(= :_ (board/get board %)) sqs)]
+              (cond-> (map (fn [sq']
+                             (moves/->BasicMove sq sq'))
+                           blanks)
+                      (and maybe-piece (not (pieces/color? its-color
+                                                           (board/get board maybe-piece))))
+                      (conj (moves/->BasicCaptureMove
+                             sq
+                             maybe-piece
+                             (board/get board maybe-piece)))))))
+          directions))
 
 (defn king-and-knight-squares
   [dirs sq]
@@ -64,8 +69,12 @@
 (defn king-and-knight-moves
   [dirs board sq color]
   (->> (king-and-knight-squares dirs sq)
-       (remove #(pieces/color? color (board/get board %)))
-       (map #(vector sq %))))
+       (map (juxt identity #(board/get board %)))
+       (remove #(pieces/color? color (second %)))
+       (map (fn [[sq' p]]
+              (if (= :_ p)
+                (moves/->BasicMove sq sq')
+                (moves/->BasicCaptureMove sq sq' p))))))
 
 (def normal-king-moves
   (partial king-and-knight-moves all-standard-movements))
@@ -89,27 +98,30 @@
         attack-left (sq/translate sq dir -1)
         attack-right (sq/translate sq dir 1)
         opponent (other-color color)
-
-        applicable-moves
-        (remove nil?
-                [(if (= :_ (board/get board forward))
-                   [sq forward])
-                 (if (and jump
-                          (= (sq/row sq) (pawn-start-row color))
-                          (= :_ (board/get board forward))
-                          (= :_ (board/get board jump)))
-                   [sq jump])
-                 (if (and attack-left
-                          (pieces/color? opponent (board/get board attack-left)))
-                   [sq attack-left])
-                 (if (and attack-right
-                          (pieces/color? opponent (board/get board attack-right)))
-                   [sq attack-right])])]
-    (if (= (pawn-penultimate-row color) (sq/row sq))
-      (for [[from to] applicable-moves
-            promote-piece (case color :white [:Q :R :B :N] :black [:q :r :b :n])]
-        [from to promote-piece])
-      applicable-moves)))
+        promoting? (= (pawn-penultimate-row color) (sq/row sq))
+        promotingly #(map f (case color :white [:Q :R :B :N] :black [:q :r :b :n]))
+        pawn (board/get board sq)]
+    (remove nil?
+            (apply concat
+             [(if (= :_ (board/get board forward))
+                (if promoting?
+                  (promotingly #(moves/->PromotionMove sq forward pawn %))
+                  [(moves/->BasicMove sq forward)]))
+              (if (and jump
+                       (= (sq/row sq) (pawn-start-row color))
+                       (= :_ (board/get board forward))
+                       (= :_ (board/get board jump)))
+                [(moves/->BasicMove sq jump)])
+              (if-let [p (and attack-left (board/get board attack-left))]
+                (when (pieces/color? opponent p)
+                  (if promoting?
+                    (promotingly #(moves/->PromotionCapture sq attack-left pawn % p))
+                    [(moves/->BasicCaptureMove sq attack-left p)])))
+              (if-let [p (and attack-right (board/get board attack-right))]
+                (when (pieces/color? opponent p)
+                  (if promoting?
+                    (promotingly #(moves/->PromotionCapture sq attack-right pawn % p))
+                    [(moves/->BasicCaptureMove sq attack-right p)])))]))))
 
 (defn normal-moves-for-piece
   [board piece color sq]
@@ -153,11 +165,11 @@
               [(and queen
                     (= :_ (board/get board queen-hop-square))
                     (attack-free? queen-hop-square)
-                    [king-square (sq/square 2 castling-row)])
+                    (moves/->CastlingMove (sq/square 0 castling-row)))
                (and king
                     (= :_ (board/get board king-hop-square))
                     (attack-free? king-hop-square)
-                    [king-square (sq/square 6 castling-row)])]))))
+                    (moves/->CastlingMove (sq/square 7 castling-row)))]))))
 
 (defn en-passant-moves
   [board turn en-passant-square]
