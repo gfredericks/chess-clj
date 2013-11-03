@@ -3,6 +3,7 @@
             [clojure.test :refer :all]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.position :as position]
+            [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.rules :refer :all]
             [com.gfredericks.chess.squares :refer :all]
             [simple-check.generators :as gen]
@@ -170,7 +171,7 @@
            [seed & more] seeds]
       (let [moves (cond->> (moves pos)
                            (= 50 (:half-move pos))
-                           (filter #(progressive-move? pos %)))]
+                           (filter moves/progressive?))]
         (if (empty? moves)
           :cool
           (let [move (rand-nth' (java.util.Random. seed) moves)]
@@ -181,3 +182,5 @@
 ;; - test various kinds of check, and how your move choices in
 ;;   a complex position become vastly fewer
 ;; - test promotions
+;; - test castling where one rook is captured in place and another
+;;   moves into his spot.
