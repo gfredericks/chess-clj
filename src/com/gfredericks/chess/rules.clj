@@ -146,15 +146,21 @@
 (defn attacks?
   "Returns true if the given color is attacking the given square."
   [board attacking-color square]
-  (->> (normal-moves board attacking-color)
-       (some (fn [move]
-               ;; HAX! How to do this with a sane API from the moves namespace?
-               (and (some #(instance? % move)
-                          [com.gfredericks.chess.moves.BasicMove
-                           com.gfredericks.chess.moves.BasicCaptureMove
-                           com.gfredericks.chess.moves.PawnCaptureMove
-                           com.gfredericks.chess.moves.PromotionCapture])
-                    (= square (moves/primary-to move)))))))
+  ;; This is a bit haxy -- in order to correctly detect attacks
+  ;; on blank squares by pawns (e.g., for castling), we make
+  ;; sure the square isn't blank before calling normal-moves.
+  (let [board' (board/set board square (case attacking-color
+                                         :white :n
+                                         :black :N))]
+    (->> (normal-moves board' attacking-color)
+         (some (fn [move]
+                 ;; HAX! How to do this with a sane API from the moves namespace?
+                 (and (some #(instance? % move)
+                            [com.gfredericks.chess.moves.BasicMove
+                             com.gfredericks.chess.moves.BasicCaptureMove
+                             com.gfredericks.chess.moves.PawnCaptureMove
+                             com.gfredericks.chess.moves.PromotionCapture])
+                      (= square (moves/primary-to move))))))))
 
 (defn castling-moves
   [board turn {:keys [king queen]}]

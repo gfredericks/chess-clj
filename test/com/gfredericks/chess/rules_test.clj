@@ -131,9 +131,9 @@
                         (legal-move? [e1 g1])
                         (false?))
          ;; direct checks
-         e6 :r, c3 :b, d3 :n, a5 :q
+         e6 :r, c3 :b, d3 :n, a5 :q, d2 :p, f2 :p
          ;; through checks
-         f6 :r, d3 :b, e3 :n, h2 :n
+         f6 :r, d3 :b, e3 :n, h2 :n, e2 :p, g2 :p
          ;; into checks
          g6 :r, e3 :b, g8 :q, h2 :p))
   (testing "You can't castle if one rook moves into the other's place"
