@@ -156,8 +156,7 @@
          (some (fn [move]
                  ;; HAX! How to do this with a sane API from the moves namespace?
                  (and (some #(instance? % move)
-                            [com.gfredericks.chess.moves.BasicMove
-                             com.gfredericks.chess.moves.BasicCaptureMove
+                            [com.gfredericks.chess.moves.BasicCaptureMove
                              com.gfredericks.chess.moves.PawnCaptureMove
                              com.gfredericks.chess.moves.PromotionCapture])
                       (= square (moves/primary-to move))))))))
