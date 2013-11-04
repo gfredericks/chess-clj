@@ -172,6 +172,8 @@
 (def ^:private ^:const no-castling {:king false :queen false})
 (def ^:private rowcol (juxt sq/row sq/col))
 
+;; TODO: we could optimize this by using actualy square codes instead
+;; of vectors
 (defn ^:private update-castling'
   [m involved-square]
   (case involved-square
