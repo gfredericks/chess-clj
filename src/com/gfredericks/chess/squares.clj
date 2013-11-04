@@ -62,3 +62,19 @@
   [^long sq drow dcol]
   (if-let [sq' (translate-row sq drow)]
     (translate-col sq' dcol)))
+
+(defn set-col
+  "Returns a square in the same row as the given square but with the
+  given column."
+  [^long sq ^long col]
+  (-> sq
+      (bit-and 56)
+      (bit-or col)))
+
+(defn set-row
+  "Returns a square in the same column as the given square but with
+  the given row."
+  [^long sq ^long row]
+  (-> sq
+      (bit-and 7)
+      (bit-or (bit-shift-left row 3))))

@@ -147,11 +147,14 @@
   "Returns true if the given color is attacking the given square."
   [board attacking-color square]
   (->> (normal-moves board attacking-color)
-       (some (fn [[from-square to-square]]
-               (and (= to-square square)
-                    ;; not a forward pawn move
-                    (not (and (pieces/pawn? (board/get board from-square))
-                              (= (sq/col from-square) (sq/col to-square)))))))))
+       (some (fn [move]
+               ;; HAX! How to do this with a sane API from the moves namespace?
+               (and (some #(instance? % move)
+                          [com.gfredericks.chess.moves.BasicMove
+                           com.gfredericks.chess.moves.BasicCaptureMove
+                           com.gfredericks.chess.moves.PawnCaptureMove
+                           com.gfredericks.chess.moves.PromotionCapture])
+                    (= square (moves/primary-to move)))))))
 
 (defn castling-moves
   [board turn {:keys [king queen]}]
@@ -340,14 +343,21 @@
     (->> (concat (normal-moves board turn)
                  (castling-moves board turn (castling turn))
                  (en-passant-moves board turn en-passant))
-         (remove (fn [[from to :as move]]
-                   (let [board' (make-move-board board move)
-                         king-sq' (if (= from king-sq) to king-sq)]
+         (remove (fn [move]
+                   (let [from-sq (moves/primary-from move)
+                         to-sq (moves/primary-to move)
+                         board' (make-move-board board move)
+                         king-sq' (if (= from-sq king-sq) to-sq king-sq)]
                      (checker board' king-sq')))))))
 
+;; Do we hate that the arg format here is not the standard
+;; representation of a move?
 (defn legal-move?
-  [pos move]
-  (boolean (some #{move} (moves pos))))
+  [pos from-to-pair]
+  (boolean (some (fn [move]
+                   (= from-to-pair [(moves/primary-from move)
+                                    (moves/primary-to move)]))
+                 (moves pos))))
 
 (defn player-to-move-in-check?
   [{:keys [turn board]}]

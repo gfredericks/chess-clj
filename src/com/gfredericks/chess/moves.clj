@@ -7,7 +7,11 @@
   (apply-forward [move board])
   (apply-backward [move board])
   (progressive? [move]
-    "Returns true if the move is a capture or a pawn move."))
+    "Returns true if the move is a capture or a pawn move.")
+  (primary-from [move]
+    "Returns the square the piece being moved is moving from.")
+  (primary-to [move]
+    "Returns the square the piece being moved is moving to."))
 
 (defn ^:private move-piece
   [board from-sq to-sq]
@@ -23,7 +27,9 @@
     (move-piece board from-sq to-sq))
   (apply-backward [_ board]
     (move-piece board to-sq from-sq))
-  (progressive? [_] false))
+  (progressive? [_] false)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
 (defrecord BasicCaptureMove [from-sq to-sq captured-piece]
   IMove
@@ -33,7 +39,9 @@
     (-> board
         (move-piece to-sq from-sq)
         (b/set to-sq captured-piece)))
-  (progressive? [_] true))
+  (progressive? [_] true)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
 (defrecord PawnForwardMove [from-sq to-sq]
   IMove
@@ -41,7 +49,9 @@
     (move-piece board from-sq to-sq))
   (apply-backward [_ board]
     (move-piece board to-sq from-sq))
-  (progressive? [_] true))
+  (progressive? [_] true)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
 (defrecord PawnCaptureMove [from-sq to-sq captured-piece]
   IMove
@@ -51,31 +61,41 @@
     (-> board
         (move-piece to-sq from-sq)
         (b/set to-sq captured-piece)))
-  (progressive? [_] true))
+  (progressive? [_] true)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
+;; Some helpers for CastlingMove
+(defn ^:private king-from
+  [rook-from-sq]
+  (sq/set-col rook-from-sq 4))
+(defn ^:private king-target
+  [rook-from-sq]
+  (sq/set-col rook-from-sq
+              (if (zero? (sq/col rook-from-sq)) 2 6)))
+(defn ^:private rook-target
+  [rook-from-sq]
+  (sq/set-col rook-from-sq
+              (if (zero? (sq/col rook-from-sq)) 3 5)))
 (defrecord CastlingMove [rook-from-sq]
   IMove
   (apply-forward [_ board]
-    (let [row (sq/row rook-from-sq)
-          queenside? (zero? (sq/col rook-from-sq))
-          sq #(sq/square % row)
-          king-from-sq (sq 4)
-          king-target (sq (if queenside? 2 6))
-          rook-target (sq (if queenside? 3 5))]
-      (-> board
-          (move-piece rook-from-sq rook-target)
-          (move-piece king-from-sq king-target))))
+    (-> board
+        (move-piece rook-from-sq
+                    (rook-target rook-from-sq))
+        (move-piece (king-from rook-from-sq)
+                    (king-target rook-from-sq))))
   (apply-backward [_ board]
-    (let [row (sq/row rook-from-sq)
-          queenside? (zero? (sq/col rook-from-sq))
-          sq #(sq/square % row)
-          king-from-sq (sq 4)
-          king-target (sq (if queenside? 2 6))
-          rook-target (sq (if queenside? 3 5))]
-      (-> board
-          (move-piece rook-target rook-from-sq)
-          (move-piece king-target king-from-sq))))
-  (progressive? [_] false))
+    (-> board
+        (move-piece (rook-target rook-from-sq)
+                    rook-from-sq)
+        (move-piece (king-target rook-from-sq)
+                    (king-from rook-from-sq))))
+  (progressive? [_] false)
+  (primary-from [_]
+    (king-from rook-from-sq))
+  (primary-to [_]
+    (king-target rook-from-sq)))
 
 ;; the capture-square and captured-piece fields can be inferred from
 ;; the from-sq and to-sq fields, but doing it this way allows us to
@@ -90,7 +110,9 @@
     (-> board
         (move-piece to-sq from-sq)
         (b/set capture-square captured-piece)))
-  (progressive? [_] true))
+  (progressive? [_] true)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
 (defrecord PromotionMove [from-sq to-sq pawn promoted-to]
   IMove
@@ -102,7 +124,9 @@
     (-> board
         (b/set from-sq pawn)
         (b/set to-sq :_)))
-  (progressive? [_] true))
+  (progressive? [_] true)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
 (defrecord PromotionCapture [from-sq to-sq pawn promoted-to captured-piece]
   IMove
@@ -114,7 +138,9 @@
     (-> board
         (b/set from-sq pawn)
         (b/set to-sq captured-piece)))
-  (progressive? [_] true))
+  (progressive? [_] true)
+  (primary-from [_] from-sq)
+  (primary-to [_] to-sq))
 
 (defn en-passant-square
   "If the move is a pawn jump, returns the in-between square.
