@@ -3,6 +3,7 @@
 
   A move is just a [from-square to-square]."
   (:require [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]
             [com.gfredericks.chess.position] ;; need this for data readers
             [com.gfredericks.chess.squares :as sq]))
@@ -44,15 +45,19 @@
 
 (defn ray-moves
   [directions board sq its-color]
-  (for [dir directions
-        :let [sqs (sqs-in-dir sq dir)
-              [blanks more] (split-with #(= :_ (board/get board %)) sqs)
-              move-tos (cond-> blanks
-                               (if-let [sq (first more)]
-                                 (not (pieces/color? its-color (board/get board sq))))
-                               (conj (first more)))]
-        move-to move-tos]
-    [sq move-to]))
+  (mapcat (fn [dir]
+            (let [sqs (sqs-in-dir sq dir)
+                  [blanks [maybe-piece]] (split-with #(= :_ (board/get board %)) sqs)]
+              (cond-> (map (fn [sq']
+                             (moves/->BasicMove sq sq'))
+                           blanks)
+                      (and maybe-piece (not (pieces/color? its-color
+                                                           (board/get board maybe-piece))))
+                      (conj (moves/->BasicCaptureMove
+                             sq
+                             maybe-piece
+                             (board/get board maybe-piece))))))
+          directions))
 
 (defn king-and-knight-squares
   [dirs sq]
@@ -64,8 +69,12 @@
 (defn king-and-knight-moves
   [dirs board sq color]
   (->> (king-and-knight-squares dirs sq)
-       (remove #(pieces/color? color (board/get board %)))
-       (map #(vector sq %))))
+       (map (juxt identity #(board/get board %)))
+       (remove #(pieces/color? color (second %)))
+       (map (fn [[sq' p]]
+              (if (= :_ p)
+                (moves/->BasicMove sq sq')
+                (moves/->BasicCaptureMove sq sq' p))))))
 
 (def normal-king-moves
   (partial king-and-knight-moves all-standard-movements))
@@ -89,27 +98,30 @@
         attack-left (sq/translate sq dir -1)
         attack-right (sq/translate sq dir 1)
         opponent (other-color color)
-
-        applicable-moves
-        (remove nil?
-                [(if (= :_ (board/get board forward))
-                   [sq forward])
-                 (if (and jump
-                          (= (sq/row sq) (pawn-start-row color))
-                          (= :_ (board/get board forward))
-                          (= :_ (board/get board jump)))
-                   [sq jump])
-                 (if (and attack-left
-                          (pieces/color? opponent (board/get board attack-left)))
-                   [sq attack-left])
-                 (if (and attack-right
-                          (pieces/color? opponent (board/get board attack-right)))
-                   [sq attack-right])])]
-    (if (= (pawn-penultimate-row color) (sq/row sq))
-      (for [[from to] applicable-moves
-            promote-piece (case color :white [:Q :R :B :N] :black [:q :r :b :n])]
-        [from to promote-piece])
-      applicable-moves)))
+        promoting? (= (pawn-penultimate-row color) (sq/row sq))
+        promotingly #(map % (case color :white [:Q :R :B :N] :black [:q :r :b :n]))
+        pawn (board/get board sq)]
+    (remove nil?
+            (apply concat
+             [(if (= :_ (board/get board forward))
+                (if promoting?
+                  (promotingly #(moves/->PromotionMove sq forward pawn %))
+                  [(moves/->PawnForwardMove sq forward)]))
+              (if (and jump
+                       (= (sq/row sq) (pawn-start-row color))
+                       (= :_ (board/get board forward))
+                       (= :_ (board/get board jump)))
+                [(moves/->PawnForwardMove sq jump)])
+              (if-let [p (and attack-left (board/get board attack-left))]
+                (when (pieces/color? opponent p)
+                  (if promoting?
+                    (promotingly #(moves/->PromotionCapture sq attack-left pawn % p))
+                    [(moves/->PawnCaptureMove sq attack-left p)])))
+              (if-let [p (and attack-right (board/get board attack-right))]
+                (when (pieces/color? opponent p)
+                  (if promoting?
+                    (promotingly #(moves/->PromotionCapture sq attack-right pawn % p))
+                    [(moves/->PawnCaptureMove sq attack-right p)])))]))))
 
 (defn normal-moves-for-piece
   [board piece color sq]
@@ -135,11 +147,14 @@
   "Returns true if the given color is attacking the given square."
   [board attacking-color square]
   (->> (normal-moves board attacking-color)
-       (some (fn [[from-square to-square]]
-               (and (= to-square square)
-                    ;; not a forward pawn move
-                    (not (and (pieces/pawn? (board/get board from-square))
-                              (= (sq/col from-square) (sq/col to-square)))))))))
+       (some (fn [move]
+               ;; HAX! How to do this with a sane API from the moves namespace?
+               (and (some #(instance? % move)
+                          [com.gfredericks.chess.moves.BasicMove
+                           com.gfredericks.chess.moves.BasicCaptureMove
+                           com.gfredericks.chess.moves.PawnCaptureMove
+                           com.gfredericks.chess.moves.PromotionCapture])
+                    (= square (moves/primary-to move)))))))
 
 (defn castling-moves
   [board turn {:keys [king queen]}]
@@ -153,11 +168,11 @@
               [(and queen
                     (= :_ (board/get board queen-hop-square))
                     (attack-free? queen-hop-square)
-                    [king-square (sq/square 2 castling-row)])
+                    (moves/->CastlingMove (sq/square 0 castling-row)))
                (and king
                     (= :_ (board/get board king-hop-square))
                     (attack-free? king-hop-square)
-                    [king-square (sq/square 6 castling-row)])]))))
+                    (moves/->CastlingMove (sq/square 7 castling-row)))]))))
 
 (defn en-passant-moves
   [board turn en-passant-square]
@@ -165,6 +180,7 @@
     (let [row (sq/row en-passant-square)
           col (sq/col en-passant-square)
           anti-pawn-dir (case turn :white -1 :black 1)
+          capture-sq (sq/translate-row en-passant-square anti-pawn-dir)
           left-sq (sq/translate en-passant-square anti-pawn-dir -1)
 
           [left-type left-color]
@@ -178,83 +194,35 @@
               [(and left-sq
                     (pieces/pawn? (board/get board left-sq))
                     (= turn (pieces/piece-color (board/get board left-sq)))
-                    [left-sq en-passant-square])
+                    (moves/->EnPassantMove left-sq
+                                           en-passant-square
+                                           capture-sq
+                                           (board/get board capture-sq)))
                (and right-sq
                     (pieces/pawn? (board/get board right-sq))
                     (= turn (pieces/piece-color (board/get board right-sq)))
-                    [right-sq en-passant-square])]))))
-
-(defn progressive-move?
-  "Returns true if the move is a capture or a pawn move"
-  [{:keys [board]} [from-square to-square]]
-  (or (pieces/pawn? (board/get board from-square))
-      (not (pieces/blank? (board/get board to-square)))))
+                    (moves/->EnPassantMove right-sq
+                                           en-passant-square
+                                           capture-sq
+                                           (board/get board capture-sq)))]))))
 
 (defn make-move-board
-  [board [from-square to-square promotion]]
-  (-> board
-      (board/set from-square :_)
-      (board/set to-square (or promotion (board/get board from-square)))))
+  [board move]
+  ;; doesn't do a whole lot anymore
+  (moves/apply-forward move board))
 
 (defn make-move
-  "Woah man is this gonna be a workhorse."
-  [{:keys [board turn en-passant castling half-move] :as pos}
-   [from-square to-square promotion :as move]]
-  (let [board' (make-move-board board move)
-        piece-moved (pieces/piece-type (board/get board from-square))
-        frow (sq/row from-square)
-        fcol (sq/col from-square)
-        trow (sq/row to-square)
-        tcol (sq/col to-square)]
-    (-> pos
-        (assoc :board board'
-               ;; set en-passant on pawn jump
-               :en-passant (if (and (= :pawn piece-moved)
-                                    (#{2 -2} (- frow trow)))
-                             (sq/square fcol (/ (+ frow trow) 2)))
-               :turn (other-color turn)
-               :half-move (if (progressive-move? pos move)
-                            0
-                            (inc half-move)))
-        (cond-> (= turn :black)
-                (update-in [:full-move] inc)
-
-                ;; move rook on castling moves
-                (and (= :king piece-moved)
-                     (#{2 -2} (- fcol tcol)))
-                (update-in [:board]
-                           (fn [board']
-                             (let [left? (= 2 tcol)
-
-                                   old-rook-square
-                                   (sq/square (if left? 0 7) frow)
-
-                                   new-rook-square
-                                   (sq/square (if left? 3 5) frow)]
-                               (-> board'
-                                   (board/set old-rook-square :_)
-                                   (board/set new-rook-square
-                                              (board/get board' old-rook-square))))))
-
-                ;; capture on en-passant moves
-                (and (= en-passant to-square)
-                     (= :pawn piece-moved))
-                (update-in [:board]
-                           (fn [board']
-                             (let [pawn-dir (case turn :white 1 :black -1)
-                                   capture-square (sq/square tcol (- trow pawn-dir))]
-                               (board/set board' capture-square :_))))
-
-                ;; set castling on king/rook moves
-                (= :king piece-moved)
-                (assoc-in [:castling turn] {:king false :queen false})
-
-                (= :rook piece-moved)
-                (cond->
-                 (= from-square (sq/square 0 (case turn :white 0 :black 7)))
-                 (assoc-in [:castling turn :queen] false)
-                 (= from-square (sq/square 7 (case turn :white 0 :black 7)))
-                 (assoc-in [:castling turn :king] false))))))
+  [{:keys [board turn half-move] :as pos} move]
+  (-> pos
+      (update-in [:board] make-move-board move)
+      (assoc :en-passant (moves/en-passant-square move)
+             :turn (other-color turn)
+             :half-move (if (moves/progressive? move)
+                          0
+                          (inc half-move)))
+      (update-in [:castling] moves/update-castling move)
+      (cond-> (= turn :black)
+              (update-in [:full-move] inc))))
 
 (defn ^:private king-checker
   [sq]
@@ -375,14 +343,21 @@
     (->> (concat (normal-moves board turn)
                  (castling-moves board turn (castling turn))
                  (en-passant-moves board turn en-passant))
-         (remove (fn [[from to :as move]]
-                   (let [board' (make-move-board board move)
-                         king-sq' (if (= from king-sq) to king-sq)]
+         (remove (fn [move]
+                   (let [from-sq (moves/primary-from move)
+                         to-sq (moves/primary-to move)
+                         board' (make-move-board board move)
+                         king-sq' (if (= from-sq king-sq) to-sq king-sq)]
                      (checker board' king-sq')))))))
 
+;; Do we hate that the arg format here is not the standard
+;; representation of a move?
 (defn legal-move?
-  [pos move]
-  (boolean (some #{move} (moves pos))))
+  [pos from-to-pair]
+  (boolean (some (fn [move]
+                   (= from-to-pair [(moves/primary-from move)
+                                    (moves/primary-to move)]))
+                 (moves pos))))
 
 (defn player-to-move-in-check?
   [{:keys [turn board]}]
