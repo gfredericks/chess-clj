@@ -24,18 +24,6 @@
 (def knight-moves
   [[2 1] [1 2] [-2 1] [-1 2] [2 -1] [1 -2] [-2 -1] [-1 -2]])
 
-(defn ^:private move?
-  "Returns true if arg is a valid move data structure."
-  [x]
-  (and (vector? x)
-       (number? (first x))
-       (number? (second x))
-       (sq/square? (first x))
-       (sq/square? (second x))
-       (or (= 2 (count x))
-           (and (= 3 (count x))
-                (keyword? (last x))))))
-
 (defn ^:private sqs-in-dir
   "Takes a square and a [dcol drow]"
   [sq [dcol drow]]
