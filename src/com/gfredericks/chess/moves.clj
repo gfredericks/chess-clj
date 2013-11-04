@@ -13,6 +13,11 @@
   (primary-to [move]
     "Returns the square the piece being moved is moving to."))
 
+(definterface IAttacking
+  (^long attackingSquare []
+         "Returns the square being attacked. This is almost always the same
+         as primary-to except in the case of en-passant."))
+
 (defn ^:private move-piece
   [board from-sq to-sq]
   (-> board
@@ -41,7 +46,9 @@
         (b/set to-sq captured-piece)))
   (progressive? [_] true)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IAttacking
+  (attackingSquare [_] to-sq))
 
 (defrecord PawnForwardMove [from-sq to-sq]
   IMove
@@ -63,7 +70,9 @@
         (b/set to-sq captured-piece)))
   (progressive? [_] true)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IAttacking
+  (attackingSquare [_] to-sq))
 
 ;; Some helpers for CastlingMove
 (defn ^:private king-from
@@ -112,7 +121,9 @@
         (b/set capture-square captured-piece)))
   (progressive? [_] true)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IAttacking
+  (attackingSquare [_] capture-square))
 
 (defrecord PromotionMove [from-sq to-sq pawn promoted-to]
   IMove
@@ -140,7 +151,9 @@
         (b/set to-sq captured-piece)))
   (progressive? [_] true)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IAttacking
+  (attackingSquare [_] to-sq))
 
 (defn en-passant-square
   "If the move is a pawn jump, returns the in-between square.
@@ -187,3 +200,8 @@
       (-> m
           (update-castling' from)
           (update-castling' to)))))
+
+(defn attacking-square
+  [move]
+  (when (instance? IAttacking move)
+    (.attackingSquare ^IAttacking move)))

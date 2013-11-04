@@ -153,13 +153,7 @@
                                          :white :n
                                          :black :N))]
     (->> (normal-moves board' attacking-color)
-         (some (fn [move]
-                 ;; HAX! How to do this with a sane API from the moves namespace?
-                 (and (some #(instance? % move)
-                            [com.gfredericks.chess.moves.BasicCaptureMove
-                             com.gfredericks.chess.moves.PawnCaptureMove
-                             com.gfredericks.chess.moves.PromotionCapture])
-                      (= square (moves/primary-to move))))))))
+         (some (fn [move] (= square (moves/attacking-square move)))))))
 
 (defn castling-moves
   [board turn {:keys [king queen]}]
