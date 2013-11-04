@@ -135,7 +135,27 @@
          ;; through checks
          f6 :r, d3 :b, e3 :n, h2 :n
          ;; into checks
-         g6 :r, e3 :b, g8 :q, h2 :p)))
+         g6 :r, e3 :b, g8 :q, h2 :p))
+  (testing "You can't castle if one rook moves into the other's place"
+    (testing "opposing piece moves out"
+      (let [pos #chess/fen "rn2k2r/8/8/8/8/8/8/R3K3 b kq - 0 1"
+            pos1 (make-moves pos [b8 d7] [e1 e2])
+            ;; white rook captures black's queen rook, then black's king
+            ;; rook moves over to where black's queen rook was.  No
+            ;; castling should be legal at this point of course.
+            pos2 (make-moves pos
+                             [b8 d7] [a1 a8] [d7 b8] [a8 a1]
+                             [h8 h1] [e1 e2] [h1 a1] [e2 f2]
+                             [a1 a8] [f2 e2] [b8 d7] [e2 f2])]
+        (is (legal-move? pos1 [e8 c8]))
+        (is (not (legal-move? pos2 [e8 c8])))))
+    (testing "opposing piece captured in place"
+      (let [pos #chess/fen "rn2k2r/8/8/8/8/8/8/R3K3 b kq - 0 1"
+            pos' (make-moves pos
+                             [b8 d7] [a1 a8] [d7 b8] [e1 e2]
+                             [h8 h1] [e2 f2] [h1 a1] [f2 e2]
+                             [a1 a8] [e2 f2] [b8 d7] [f2 e2])]
+        (is (not (legal-move? pos' [e8 c8])))))))
 
 (def en-passant-pos
   #chess/fen "3k4/8/8/8/2p2p1p/8/1P4P1/4K3 w K - 0 1")
@@ -199,5 +219,3 @@
 ;; - test various kinds of check, and how your move choices in
 ;;   a complex position become vastly fewer
 ;; - test promotions
-;; - test castling where one rook is captured in place and another
-;;   moves into his spot.

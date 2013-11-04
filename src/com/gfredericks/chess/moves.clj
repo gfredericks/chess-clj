@@ -157,6 +157,18 @@
                    (bit-shift-right (+ from-row to-row) 1))))))
 
 (def ^:private ^:const no-castling {:king false :queen false})
+(def ^:private rowcol (juxt sq/row sq/col))
+
+(defn ^:private update-castling'
+  [m involved-square]
+  (case involved-square
+    [0 4] (assoc m :white no-castling)
+    [0 0] (assoc-in m [:white :queen] false)
+    [0 7] (assoc-in m [:white :king] false)
+    [7 4] (assoc m :black no-castling)
+    [7 0] (assoc-in m [:black :queen] false)
+    [7 7] (assoc-in m [:black :king] false)
+    m))
 
 (defn update-castling
   "Given a map of the form:
@@ -167,22 +179,11 @@
   And a move, returns a new map with maybe some of the entries
   set to false as appropriate."
   [m move]
-  ;; smelly!
-  (cond
-
-   (instance? CastlingMove move)
-   (assoc m (-> move :rook-from-sq sq/row ({0 :white 7 :black}))
-          no-castling)
-
-   (or (instance? BasicMove move)
-       (instance? BasicCaptureMove move))
-   (condp = ((juxt sq/row sq/col) (:from-sq move))
-     [0 4] (assoc m :white no-castling)
-     [0 0] (assoc-in m [:white :queen] false)
-     [0 7] (assoc-in m [:white :king] false)
-     [7 4] (assoc m :black no-castling)
-     [7 0] (assoc-in m [:black :queen] false)
-     [7 7] (assoc-in m [:black :king] false)
-     m)
-
-   :else m))
+  (if (instance? CastlingMove move)
+    (assoc m (-> move :rook-from-sq sq/row ({0 :white 7 :black}))
+           no-castling)
+    (let [from (rowcol (primary-from move))
+          to   (rowcol (primary-to move))]
+      (-> m
+          (update-castling' from)
+          (update-castling' to)))))
