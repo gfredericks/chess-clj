@@ -358,3 +358,111 @@
       :checkmate
       :stalemate)
     :ongoing))
+
+;;
+;; Backwards moves!
+;;
+
+(def not-kings
+  {:white [:P :N :B :R :Q]
+   :black [:p :n :b :r :q]})
+
+(defn ray-unmoves
+  [directions board sq unmoving-color]
+  (for [dir directions
+        blank-sq (take-while #(= :_ (board/get board %)) (sqs-in-dir sq dir))
+        captured-piece (cons :_ (not-kings (other-color unmoving-color)))]
+    (if (= :_ captured-piece)
+      (moves/->BasicMove blank-sq sq)
+      (moves/->BasicCaptureMove blank-sq sq captured-piece))))
+
+(defn king-and-knight-unmoves
+  [dirs board sq unmoving-color]
+  (for [sq (king-and-knight-squares dirs sq)
+        :let [entry (board/get board sq)]
+        :when (= :_ entry)
+        captured-piece (cons :_ (not-kings (other-color unmoving-color)))]
+    (if (= :_ captured-piece)
+      (moves/->BasicMove blank-sq sq)
+      (moves/->BasicCaptureMove blank-sq sq captured-piece))))
+
+(def normal-king-unmoves
+  (partial king-and-knight-moves all-standard-movements))
+(def normal-queen-unmoves
+  (partial ray-moves all-standard-movements))
+(def normal-rook-unmoves
+  (partial ray-moves rectilinear-movements))
+(def normal-bishop-unmoves
+  (partial ray-moves diagonal-movements))
+(def normal-knight-unmoves
+  (partial king-and-knight-moves knight-moves))
+
+(defn normal-pawn-unmoves
+  [board sq unmoving-color]
+  (let [dir (pawn-direction unmoving-color)
+        forward (sq/translate-row sq dir)
+        jump (sq/translate-row forward dir)
+        attack-left (sq/translate sq dir -1)
+        attack-right (sq/translate sq dir 1)
+        opponent (other-color unmoving-color)
+        promoting? (= (pawn-penultimate-row unmoving-color) (sq/row sq))
+        promotingly #(map % (case unmoving-color :white [:Q :R :B :N] :black [:q :r :b :n]))
+        pawn (board/get board sq)]
+    (remove nil?
+            (apply concat
+             [(if (= :_ (board/get board forward))
+                (if promoting?
+                  (promotingly #(moves/->PromotionMove sq forward pawn %))
+                  [(moves/->PawnForwardMove sq forward)]))
+              (if (and jump
+                       (= (sq/row sq) (pawn-start-row unmoving-color))
+                       (= :_ (board/get board forward))
+                       (= :_ (board/get board jump)))
+                [(moves/->PawnForwardMove sq jump)])
+              (if-let [p (and attack-left (board/get board attack-left))]
+                (when (pieces/color? opponent p)
+                  (if promoting?
+                    (promotingly #(moves/->PromotionCapture sq attack-left pawn % p))
+                    [(moves/->PawnCaptureMove sq attack-left p)])))
+              (if-let [p (and attack-right (board/get board attack-right))]
+                (when (pieces/color? opponent p)
+                  (if promoting?
+                    (promotingly #(moves/->PromotionCapture sq attack-right pawn % p))
+                    [(moves/->PawnCaptureMove sq attack-right p)])))]))))
+
+(defn normal-unmoves-for-piece
+  [board piece color sq]
+  ((case (pieces/piece-type piece)
+     :king normal-king-unmoves
+     :queen normal-queen-unmoves
+     :rook normal-rook-unmoves
+     :bishop normal-bishop-unmoves
+     :knight normal-knight-unmoves
+     :pawn normal-pawn-unmoves)
+   board
+   sq
+   color))
+
+(defn normal-unmoves
+  [board color-to-unmove]
+  (for [[sq p] (board/piece-placements board)
+        :when (pieces/color? color-to-unmove p)
+        mv (normal-moves-for-piece board p color-to-unmove sq)]
+    mv))
+
+;;
+;; TODO:
+;;
+;; Unpromotions
+;;
+(defn unmoves
+  "Returns all legal backwards moves."
+  [{:keys [board turn] :as pos}]
+  (let [turn' (other-color turn)
+        king-square (king-square board turn)]
+    (->> (concat (normal-unmoves board turn')
+                 (castling-unmoves board turn')
+                 (en-passant-unmoves board turn'))
+         (remove (fn [move]
+                   (let [board' (moves/apply-backward move board)]
+                     (attacks? board' turn' king-square)))))))
