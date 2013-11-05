@@ -1,5 +1,5 @@
 (ns com.gfredericks.chess.board
-  (:refer-clojure :exclude [get set])
+  (:refer-clojure :exclude [get set reduce])
   (:require [clojure.core :as core]
             [com.gfredericks.chess.squares :as sq]))
 
@@ -78,10 +78,10 @@
   "Given the board portion of a FEN string, returns the board it
   represents."
   [s]
-  (reduce (fn [b [p sq]]
-            (set b sq p))
-          empty-board
-          (fen-board->piece-locations s)))
+  (core/reduce (fn [b [p sq]]
+                 (set b sq p))
+               empty-board
+               (fen-board->piece-locations s)))
 
 (defn board->fen-board
   "Given a board, returns the board portion of the FEN string."
@@ -113,18 +113,34 @@
   (println (apply str "  " (repeat 33 \-)))
   (println "   " (apply str (for [x "abcdefgh"] (str x "   ")))))
 
+(defmacro reduce
+  "Like areduce but runs over all the squares of a board."
+  [board sq-name piece-name ret-name init expr]
+  `(let [board# ~board]
+     (loop [~ret-name ~init
+            outer-index# 0
+            inner-index# 0
+            outer-i# 1
+            x# (core/get board# 0)]
+       (if (= 16 inner-index#)
+         (if (= 4 outer-i#)
+           ~ret-name
+           (recur ~ret-name (+ outer-index# 16) 0 (inc outer-i#) (core/get board# outer-i#)))
+         (let [~sq-name (+ outer-index# inner-index#)
+               ~piece-name (bit-and x# 15)]
+           (recur ~expr outer-index# (inc inner-index#) outer-i# (bit-shift-right x# 4)))))))
+
+(defn ray-from
+  "Returns a sequence of [sq piece] tuples starting from (but not
+  including) the given square (orig), taking the given steps, until it
+  encounters another piece (included) or the edge of the board."
+  [[col-step row-step] orig]
+  )
+
 (defn piece-placements
   "Returns a sequence of tuples: [sq piece]."
   [board]
-  (loop [ret (transient [])
-         outer-index 0
-         inner-index 0
-         outer-i 1
-         ^long x (core/get board 0)]
-    (if (= 16 inner-index)
-      (if (= 4 outer-i)
-        (persistent! ret)
-        (recur ret (+ outer-index 16) 0 (inc outer-i) (core/get board outer-i)))
-      (let [p (bit-and x 15)
-            ret' (if (zero? p) ret (conj! ret [(+ outer-index inner-index) (pieces' p)]))]
-        (recur ret' outer-index (inc inner-index) outer-i (bit-shift-right x 4))))))
+  (persistent! (reduce board sq p ret (transient [])
+                       (if (zero? p)
+                         ret
+                         (conj! ret [sq (pieces' p)])))))
