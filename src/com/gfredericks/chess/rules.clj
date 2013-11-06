@@ -378,8 +378,8 @@
 
 (defn king-and-knight-unmoves
   [dirs board sq unmoving-color]
-  (for [sq (king-and-knight-squares dirs sq)
-        :let [entry (board/get board sq)]
+  (for [blank-sq (king-and-knight-squares dirs sq)
+        :let [entry (board/get board blank-sq)]
         :when (= :_ entry)
         captured-piece (cons :_ (not-kings (other-color unmoving-color)))]
     (if (= :_ captured-piece)
@@ -387,48 +387,41 @@
       (moves/->BasicCaptureMove blank-sq sq captured-piece))))
 
 (def normal-king-unmoves
-  (partial king-and-knight-moves all-standard-movements))
+  (partial king-and-knight-unmoves all-standard-movements))
 (def normal-queen-unmoves
-  (partial ray-moves all-standard-movements))
+  (partial ray-unmoves all-standard-movements))
 (def normal-rook-unmoves
-  (partial ray-moves rectilinear-movements))
+  (partial ray-unmoves rectilinear-movements))
 (def normal-bishop-unmoves
-  (partial ray-moves diagonal-movements))
+  (partial ray-unmoves diagonal-movements))
 (def normal-knight-unmoves
-  (partial king-and-knight-moves knight-moves))
+  (partial king-and-knight-unmoves knight-moves))
 
 (defn normal-pawn-unmoves
   [board sq unmoving-color]
-  (let [dir (pawn-direction unmoving-color)
-        forward (sq/translate-row sq dir)
-        jump (sq/translate-row forward dir)
+  (let [dir (- (pawn-direction unmoving-color))
+        backward (sq/translate-row sq dir)
+        jump (sq/translate-row backward dir)
         attack-left (sq/translate sq dir -1)
         attack-right (sq/translate sq dir 1)
-        opponent (other-color unmoving-color)
-        promoting? (= (pawn-penultimate-row unmoving-color) (sq/row sq))
-        promotingly #(map % (case unmoving-color :white [:Q :R :B :N] :black [:q :r :b :n]))
-        pawn (board/get board sq)]
+        opponent (other-color unmoving-color)]
     (remove nil?
             (apply concat
-             [(if (= :_ (board/get board forward))
-                (if promoting?
-                  (promotingly #(moves/->PromotionMove sq forward pawn %))
-                  [(moves/->PawnForwardMove sq forward)]))
+             [(if (= :_ (board/get board backward))
+                [(moves/->PawnForwardMove backward sq)])
               (if (and jump
-                       (= (sq/row sq) (pawn-start-row unmoving-color))
-                       (= :_ (board/get board forward))
+                       (= (sq/row jump) (pawn-start-row unmoving-color))
+                       (= :_ (board/get board backward))
                        (= :_ (board/get board jump)))
-                [(moves/->PawnForwardMove sq jump)])
+                [(moves/->PawnForwardMove jump sq)])
               (if-let [p (and attack-left (board/get board attack-left))]
-                (when (pieces/color? opponent p)
-                  (if promoting?
-                    (promotingly #(moves/->PromotionCapture sq attack-left pawn % p))
-                    [(moves/->PawnCaptureMove sq attack-left p)])))
+                (when (= :_ (board/get board attack-left))
+                  (for [captured-piece (not-kings opponent)]
+                    (moves/->PawnCaptureMove attack-left sq p))))
               (if-let [p (and attack-right (board/get board attack-right))]
-                (when (pieces/color? opponent p)
-                  (if promoting?
-                    (promotingly #(moves/->PromotionCapture sq attack-right pawn % p))
-                    [(moves/->PawnCaptureMove sq attack-right p)])))]))))
+                (when (= :_ (board/get board attack-right))
+                  (for [captured-piece (not-kings opponent)]
+                    (moves/->PawnCaptureMove attack-right sq p))))]))))
 
 (defn normal-unmoves-for-piece
   [board piece color sq]
@@ -449,6 +442,12 @@
         :when (pieces/color? color-to-unmove p)
         mv (normal-moves-for-piece board p color-to-unmove sq)]
     mv))
+
+(defn castling-unmoves
+  [board unmoving-color])
+
+(defn en-passant-unmoves
+  [board unmoving-color])
 
 ;;
 ;; TODO:

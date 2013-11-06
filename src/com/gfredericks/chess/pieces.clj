@@ -36,6 +36,10 @@
   [p]
   (case p :P true :p true false))
 
+(defn king?
+  [p]
+  (case p :K true :k true false))
+
 (defn blank?
   [p]
   (= :_ p))

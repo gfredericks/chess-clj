@@ -2,6 +2,7 @@
   (:require [clojure.set :as sets]
             [clojure.test :refer :all]
             [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.generators :as cgen]
             [com.gfredericks.chess.position :as position]
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.rules :refer :all]
@@ -219,3 +220,17 @@
 ;; - test various kinds of check, and how your move choices in
 ;;   a complex position become vastly fewer
 ;; - test promotions
+
+
+;;
+;; Backwards!
+;;
+
+(defspec forwards-backwards-roundtrip 100
+  (prop/for-all [[pos mv] (-> cgen/position
+                              (->> (gen/such-that (comp not-empty moves)))
+                              (gen/bind (fn [pos]
+                                          (gen/fmap #(vector pos %)
+                                                    (gen/elements (moves pos))))))]
+                (some #{mv}
+                      (unmoves (make-move pos mv)))))
