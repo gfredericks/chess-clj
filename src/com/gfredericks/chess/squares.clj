@@ -78,3 +78,11 @@
   (-> sq
       (bit-and 7)
       (bit-or (bit-shift-left row 3))))
+
+(defn promotion-row
+  [color]
+  (case color :white 7 :black 0))
+
+(defn antepromotion-row
+  [color]
+  (case color :white 6 :black 1))

@@ -17,7 +17,7 @@
    (fn [pieces]
      (reduce
       (fn [b [piece sq]]
-        (set b sq piece))
+        (board/set b sq piece))
       board/empty-board
       (map list pieces sq/all-squares)))
    (apply gen/tuple (repeat 64 piece))))

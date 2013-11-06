@@ -415,13 +415,13 @@
                        (= :_ (board/get board jump)))
                 [(moves/->PawnForwardMove jump sq)])
               (if-let [p (and attack-left (board/get board attack-left))]
-                (when (= :_ (board/get board attack-left))
+                (when (= :_ p)
                   (for [captured-piece (not-kings opponent)]
-                    (moves/->PawnCaptureMove attack-left sq p))))
+                    (moves/->PawnCaptureMove attack-left sq captured-piece))))
               (if-let [p (and attack-right (board/get board attack-right))]
-                (when (= :_ (board/get board attack-right))
+                (when (= :_ p)
                   (for [captured-piece (not-kings opponent)]
-                    (moves/->PawnCaptureMove attack-right sq p))))]))))
+                    (moves/->PawnCaptureMove attack-right sq captured-piece))))]))))
 
 (defn normal-unmoves-for-piece
   [board piece color sq]
@@ -437,11 +437,38 @@
    color))
 
 (defn normal-unmoves
-  [board color-to-unmove]
+  [board unmoving-color]
   (for [[sq p] (board/piece-placements board)
-        :when (pieces/color? color-to-unmove p)
-        mv (normal-moves-for-piece board p color-to-unmove sq)]
+        :when (pieces/color? unmoving-color p)
+        mv (normal-unmoves-for-piece board p unmoving-color sq)]
     mv))
+
+(defn promotional-unmoves
+  [board unmoving-color]
+  (let [row (sq/promotion-row unmoving-color)]
+    (for [col (range 8)
+          :let [sq (sq/square col row)
+                p (board/get board sq)
+                pawn (case unmoving-color :white :P :black :p)]
+          :when (pieces/color? unmoving-color p)
+          :when (not (or (pieces/king? p) (pieces/pawn? p)))
+          :let [center (sq/set-row sq (sq/antepromotion-row unmoving-color))
+                left (sq/translate-col center -1)
+                right (sq/translate-col center 1)
+                capturables (remove pieces/pawn?
+                                    (not-kings (other-color unmoving-color)))]
+          move (concat
+                (when (pieces/blank? (board/get board center))
+                  [(moves/->PromotionMove center sq pawn p)])
+                (when (and left
+                           (pieces/blank? (board/get board left)))
+                  (for [captured-piece capturables]
+                    (moves/->PromotionCapture left sq pawn p captured-piece)))
+                (when (and right
+                           (pieces/blank? (board/get board right)))
+                  (for [captured-piece capturables]
+                    (moves/->PromotionCapture right sq pawn p captured-piece))))]
+      move)))
 
 (defn castling-unmoves
   [board unmoving-color])
@@ -460,6 +487,7 @@
   (let [turn' (other-color turn)
         king-square (king-square board turn)]
     (->> (concat (normal-unmoves board turn')
+                 (promotional-unmoves board turn')
                  (castling-unmoves board turn')
                  (en-passant-unmoves board turn'))
          (remove (fn [move]
