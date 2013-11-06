@@ -234,3 +234,12 @@
                                                     (gen/elements (moves pos))))))]
                 (some #{mv}
                       (unmoves (make-move pos mv)))))
+
+(defspec backwards-forwards-roundtrip 100
+  (prop/for-all [[pos mv] (-> cgen/position
+                              (->> (gen/such-that (comp not-empty unmoves)))
+                              (gen/bind (fn [pos]
+                                          (gen/fmap #(vector pos %)
+                                                    (gen/elements (unmoves pos))))))]
+                (some #{mv}
+                      (moves (make-unmove pos mv)))))

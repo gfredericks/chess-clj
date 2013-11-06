@@ -369,22 +369,26 @@
 
 (defn ray-unmoves
   [directions board sq unmoving-color]
-  (for [dir directions
-        blank-sq (take-while #(= :_ (board/get board %)) (sqs-in-dir sq dir))
-        captured-piece (cons :_ (not-kings (other-color unmoving-color)))]
-    (if (= :_ captured-piece)
-      (moves/->BasicMove blank-sq sq)
-      (moves/->BasicCaptureMove blank-sq sq captured-piece))))
+  (let [extreme-row? (case (sq/row sq) 0 true 7 true false)]
+    (for [dir directions
+          blank-sq (take-while #(= :_ (board/get board %)) (sqs-in-dir sq dir))
+          captured-piece (cons :_ (not-kings (other-color unmoving-color)))
+          :when (not (and extreme-row? (pieces/pawn? captured-piece)))]
+      (if (= :_ captured-piece)
+        (moves/->BasicMove blank-sq sq)
+        (moves/->BasicCaptureMove blank-sq sq captured-piece)))))
 
 (defn king-and-knight-unmoves
   [dirs board sq unmoving-color]
-  (for [blank-sq (king-and-knight-squares dirs sq)
-        :let [entry (board/get board blank-sq)]
-        :when (= :_ entry)
-        captured-piece (cons :_ (not-kings (other-color unmoving-color)))]
-    (if (= :_ captured-piece)
-      (moves/->BasicMove blank-sq sq)
-      (moves/->BasicCaptureMove blank-sq sq captured-piece))))
+  (let [extreme-row? (case (sq/row sq) 0 true 7 true false)]
+    (for [blank-sq (king-and-knight-squares dirs sq)
+          :let [entry (board/get board blank-sq)]
+          :when (= :_ entry)
+          captured-piece (cons :_ (not-kings (other-color unmoving-color)))
+          :when (not (and extreme-row? (pieces/pawn? captured-piece)))]
+      (if (= :_ captured-piece)
+        (moves/->BasicMove blank-sq sq)
+        (moves/->BasicCaptureMove blank-sq sq captured-piece)))))
 
 (def normal-king-unmoves
   (partial king-and-knight-unmoves all-standard-movements))
@@ -493,3 +497,15 @@
          (remove (fn [move]
                    (let [board' (moves/apply-backward move board)]
                      (attacks? board' turn' king-square)))))))
+
+(defn make-unmove
+  [{:keys [board turn half-move] :as pos} move]
+  (-> pos
+      (update-in [:board] #(moves/apply-backward move %))
+      (assoc :en-passant nil ; TODO
+             :turn (other-color turn)
+             :half-move 0 ; TODO
+             )
+      ;; (update-in [:castling] moves/update-castling move)
+      (cond-> (= turn :white)
+              (update-in [:full-move] dec))))
