@@ -149,15 +149,22 @@
         king-square (sq/square 4 castling-row)
         queen-hop-square (sq/square 3 castling-row)
         king-hop-square (sq/square 5 castling-row)
-        attack-free? #(not (attacks? board (other-color turn) %))]
+        king-target-square (sq/square 6 castling-row)
+        queen-target-square (sq/square 2 castling-row)
+        queen-knight-square (sq/square 1 castling-row)
+        attack-free? #(not (attacks? board (other-color turn) %))
+        blank? #(= :_ (board/get board %))]
     (if (attack-free? king-square)
       (filter identity
               [(and queen
-                    (= :_ (board/get board queen-hop-square))
+                    (blank? queen-hop-square)
+                    (blank? queen-target-square)
+                    (blank? queen-knight-square)
                     (attack-free? queen-hop-square)
                     (moves/->CastlingMove (sq/square 0 castling-row)))
                (and king
-                    (= :_ (board/get board king-hop-square))
+                    (blank? king-hop-square)
+                    (blank? king-target-square)
                     (attack-free? king-hop-square)
                     (moves/->CastlingMove (sq/square 7 castling-row)))]))))
 
