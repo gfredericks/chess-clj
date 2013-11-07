@@ -320,3 +320,10 @@
 (defspec reachable-pos-roundtrip 10
   (prop/for-all [pos gen-reachable-pos]
     (roundtrips? pos)))
+
+(def special-moves-pos
+  #chess/fen "1n2k2r/P6p/8/5pP1/8/8/8/R3K3 w Qk f6 0 1")
+
+(deftest roundtrips-with-special-moves
+  (is (roundtrips? special-moves-pos))
+  (is (roundtrips? (assoc special-moves-pos :turn :black))))

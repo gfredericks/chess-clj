@@ -481,16 +481,49 @@
       move)))
 
 (defn castling-unmoves
-  [board unmoving-color])
+  [board unmoving-color]
+  (let [back-row (sq/back-row unmoving-color)
+
+        king-piece (case unmoving-color :white :K :black :k)
+        rook-piece (case unmoving-color :white :R :black :r)
+
+        [queen-rook queen-knight queen-bishop queen king king-bishop king-knight king-rook]
+        (map #(sq/square % back-row) (range 8))
+
+        blank? #(= :_ (board/get board %))]
+    (filter identity
+            [(and (= king-piece (board/get board queen-bishop))
+                  (= rook-piece (board/get board queen))
+                  (blank? queen-rook)
+                  (blank? queen-knight)
+                  (blank? king)
+                  (moves/->CastlingMove queen-rook))
+             (and (= king-piece (board/get board king-knight))
+                  (= rook-piece (board/get board king-bishop))
+                  (blank? king-rook)
+                  (blank? king)
+                  (moves/->CastlingMove king-rook))])))
 
 (defn en-passant-unmoves
-  [board unmoving-color])
+  [board unmoving-color]
+  (let [moved-to-row (sq/post-en-passant-row unmoving-color)
+        moved-from-row (sq/pre-en-passant-row unmoving-color)]
+    (for [col (range 8)
+          :let [moved-to (sq/square col moved-to-row)
+                p (board/get board moved-to)]
+          :when (and (pieces/pawn? p)
+                     (pieces/color? unmoving-color p))
+          :let [captured-sq (sq/square col moved-from-row)]
+          :when (pieces/blank? (board/get board captured-sq))
+          sideways [-1 1]
+          :let [moved-from (sq/translate-col captured-sq sideways)]
+          :when (and moved-from
+                     (pieces/blank? (board/get board moved-from)))
+          :let [captured-pawn (case unmoving-color :white :p :black :P)]]
+      (moves/->EnPassantMove moved-from moved-to captured-sq captured-pawn))))
 
-;;
-;; TODO:
-;;
-;; Unpromotions
-;;
+;; TODO: positions with an en-passant square should only return a
+;; single possible move.
 (defn unmoves
   "Returns all legal backwards moves."
   [{:keys [board turn] :as pos}]
