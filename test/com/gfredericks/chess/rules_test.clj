@@ -156,7 +156,32 @@
                              [b8 d7] [a1 a8] [d7 b8] [e1 e2]
                              [h8 h1] [e2 f2] [h1 a1] [f2 e2]
                              [a1 a8] [e2 f2] [b8 d7] [f2 e2])]
-        (is (not (legal-move? pos' [e8 c8])))))))
+        (is (not (legal-move? pos' [e8 c8]))))))
+  (testing "You can't castle if there are pieces in the way"
+    (let [white-pos #chess/fen "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
+          black-pos (assoc white-pos :turn :black)
+          white-kingside [e1 g1]
+          white-queenside [e1 c1]
+          black-kingside [e8 g8]
+          black-queenside [e8 c8]]
+      (are [pos mv] (legal-move? pos mv)
+           white-pos white-queenside
+           white-pos white-kingside
+           black-pos black-queenside
+           black-pos black-kingside)
+      (are [piece sq pos mv] (let [pos' (update-in pos [:board]
+                                                   board/set sq piece)]
+                               (not (legal-move? pos' mv)))
+           :Q b1 white-pos white-queenside
+           :N c1 white-pos white-queenside
+           :B d1 white-pos white-queenside
+           :Q f1 white-pos white-kingside
+           :R g1 white-pos white-kingside
+           :q b8 black-pos black-queenside
+           :n c8 black-pos black-queenside
+           :b d8 black-pos black-queenside
+           :q f8 black-pos black-kingside
+           :r g8 black-pos black-kingside))))
 
 (def en-passant-pos
   #chess/fen "3k4/8/8/8/2p2p1p/8/1P4P1/4K3 w K - 0 1")
