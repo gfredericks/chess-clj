@@ -169,6 +169,11 @@
         (sq/square (sq/col from-sq)
                    (bit-shift-right (+ from-row to-row) 1))))))
 
+(defn backwards-en-passant-square
+  [move]
+  (when (instance? EnPassantMove move)
+    (.to_sq ^EnPassantMove move)))
+
 (def ^:private ^:const no-castling {:king false :queen false})
 (def ^:private rowcol (juxt sq/row sq/col))
 

@@ -541,7 +541,7 @@
   [{:keys [board turn half-move] :as pos} move]
   (-> pos
       (update-in [:board] #(moves/apply-backward move %))
-      (assoc :en-passant nil ; TODO
+      (assoc :en-passant (moves/backwards-en-passant-square move)
              :turn (other-color turn)
              :half-move 0 ; TODO
              )
