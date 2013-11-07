@@ -223,6 +223,26 @@
                                 (cons move moves))
                               (gen-game-from pos'))))))))
 
+(def gen-game-prefix
+  "Generates a sequence of moves from the initial position."
+  (gen/bind gen/pos-int
+            (fn f
+              ([move-count]
+                 (f move-count position/initial))
+              ([move-count pos]
+                 (if (zero? move-count)
+                   (gen/return ())
+                   (let [legal-moves (moves pos)]
+                     (if (empty? legal-moves)
+                       (gen/return ())
+                       (gen/bind (gen/elements legal-moves)
+                                 (fn [move]
+                                   (gen/fmap #(cons move %)
+                                    (f (dec move-count) (make-move pos move))))))))))))
+
+(def gen-reachable-pos
+  (gen/fmap #(reduce make-move position/initial %) gen-game-prefix))
+
 (defspec play-a-random-game 10
   (prop/for-all [move-list (gen-game-from position/initial)]
     (let [final-position (reduce make-move position/initial move-list)
@@ -258,3 +278,20 @@
                                                     (gen/elements (unmoves pos))))))]
                 (some #{mv}
                       (moves (make-unmove pos mv)))))
+
+(defn roundtrips?
+  [pos]
+  (let [the-moves (moves pos)
+        the-unmoves (unmoves pos)]
+    (and (every? (fn [move]
+                   (some #{move}
+                         (unmoves (make-move pos move))))
+                 the-moves)
+         (every? (fn [unmove]
+                   (some #{unmove}
+                         (moves (make-unmove pos unmove))))
+                 the-unmoves))))
+
+(defspec reachable-pos-roundtrip 10
+  (prop/for-all [pos gen-reachable-pos]
+    (roundtrips? pos)))
