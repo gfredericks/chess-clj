@@ -87,6 +87,40 @@
 (defn rand-nth [^java.util.Random rnd coll]
   (nth coll (.nextInt rnd (int (count coll)))))
 
+(defn ^:private generate-castling
+  "Returns a castling map for the position, where the entries might be
+  true only if the pieces are in the correct positions, otherwise
+  always false."
+  [^java.util.Random rnd board]
+  (letfn [(thing [king rook king-square rook-square]
+            (if (and (= king (board/get board king-square))
+                     (= rook (board/get board rook-square)))
+              (case (.nextInt rnd 2) 0 true 1 false)
+              false))]
+    {:white {:king  (thing :K :R sq/e1 sq/h1)
+             :queen (thing :K :R sq/e1 sq/a1)}
+     :black {:king  (thing :k :r sq/e8 sq/h8)
+             :queen (thing :k :r sq/e8 sq/a8)}}))
+
+(defn generate-en-passant
+  "If the player that just moved could plausibly have made a pawn
+  jump, might set the en-passant square to behind any of those
+  pawns. Otherwise returns nil."
+  [^java.util.Random rnd board player-to-move]
+  (let [moved-player ({:black :white :white :black} player-to-move)
+        jump-row      (sq/pawn-jump-row moved-player)
+        jump-over-row (sq/pawn-jump-over-row moved-player)
+        start-row     (sq/pawn-start-row moved-player)
+        possibles (for [col (range 8)
+                        :let [p (board/get board (sq/square col jump-row))]
+                        :when (and (pieces/pawn? p)
+                                   (pieces/color? moved-player p))
+                        :let [sq (sq/square col jump-over-row)]
+                        :when (pieces/blank? (board/get board sq))
+                        :when (pieces/blank? (board/get board (sq/square col start-row)))]
+                    sq)]
+    (rand-nth rnd (cons nil possibles))))
+
 (defn random-position
   [rnd]
   (let [rand-blank (fn [board]
@@ -131,11 +165,11 @@
                                       (place new-piece))))
                           <>
                           pieces-to-place)))
+        turn (rand-nth rnd [:white :black])
         pos (with-meta {:board board
-                        :turn (rand-nth rnd [:white :black])
-                        :castling {:white {:king false :queen false}
-                                   :black {:king false :queen false}}
-                        :en-passant nil
+                        :turn turn
+                        :castling (generate-castling rnd board)
+                        :en-passant (generate-en-passant rnd board turn)
                         :half-move 0
                         :full-move 0}
               {:type ::position/position})]

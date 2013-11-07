@@ -75,7 +75,6 @@
 (def normal-knight-moves
   (partial king-and-knight-moves knight-moves))
 
-(def pawn-start-row {:white 1, :black 6})
 (def pawn-direction {:white 1, :black -1})
 (def pawn-penultimate-row {:white 6, :black 1})
 (defn normal-pawn-moves
@@ -96,7 +95,7 @@
                   (promotingly #(moves/->PromotionMove sq forward pawn %))
                   [(moves/->PawnForwardMove sq forward)]))
               (if (and jump
-                       (= (sq/row sq) (pawn-start-row color))
+                       (= (sq/row sq) (sq/pawn-start-row color))
                        (= :_ (board/get board forward))
                        (= :_ (board/get board jump)))
                 [(moves/->PawnForwardMove sq jump)])
@@ -414,7 +413,7 @@
              [(if (= :_ (board/get board backward))
                 [(moves/->PawnForwardMove backward sq)])
               (if (and jump
-                       (= (sq/row jump) (pawn-start-row unmoving-color))
+                       (= (sq/row jump) (sq/pawn-start-row unmoving-color))
                        (= :_ (board/get board backward))
                        (= :_ (board/get board jump)))
                 [(moves/->PawnForwardMove jump sq)])
