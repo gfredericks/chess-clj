@@ -1,6 +1,7 @@
 (ns com.gfredericks.chess.position
   (:require [clojure.string :as s]
-            [com.gfredericks.chess.board :as board]))
+            [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.squares :as sq]))
 
 (defn- vecs
   [coll]
@@ -9,22 +10,23 @@
 
 (defn algebraic-square->pair
   [alg-square]
-  (->> alg-square name seq ((fn [[a b]] [(dec (read-string (str b)))
-                                         ({\a 0 \b 1 \c 2 \d 3
-                                           \e 4 \f 5 \g 6 \h 7}
-                                          a)]))))
+  (->> alg-square seq ((fn [[a b]] (sq/square ({\a 0 \b 1 \c 2 \d 3
+                                                \e 4 \f 5 \g 6 \h 7}
+                                               a)
+                                              (dec (read-string (str b))))))))
 
 (defn pair->algebraic-square
   "Returns a string"
-  [[row col]]
-  (str (nth "abcdefgh" col)
-       (inc row)))
+  [sq]
+  (let [row (sq/row sq)
+        col (sq/col sq)]
+    (str (nth "abcdefgh" col)
+         (inc row))))
 
 (defn read-fen
   [fen]
   (let [[board turn castling ep half full] (re-seq #"\S+" fen),
-        castling (set castling)
-        ep (seq ep)]
+        castling (set castling)]
     (with-meta
       {:board (board/read-fen-board board)
        :turn ({"w" :white "b" :black} turn)
@@ -32,7 +34,7 @@
                           :queen (contains? castling \Q)}
                   :black {:king (contains? castling \k)
                           :queen (contains? castling \q)}}
-       :en-passant (when-not (= [\-] ep)
+       :en-passant (when-not (= "-" ep)
                      (algebraic-square->pair ep))
        :half-move (read-string half)
        :full-move (read-string full)}
