@@ -13,6 +13,7 @@
 (def piece (gen/elements (keys board/pieces)))
 
 (def board
+  "Generates a naive board with random entries."
   (gen/fmap
    (fn [pieces]
      (reduce

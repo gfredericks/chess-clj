@@ -8,14 +8,15 @@
   (vec (map vec coll)))
 
 
-(defn algebraic-square->pair
-  [alg-square]
-  (->> alg-square seq ((fn [[a b]] (sq/square ({\a 0 \b 1 \c 2 \d 3
-                                                \e 4 \f 5 \g 6 \h 7}
-                                               a)
-                                              (dec (read-string (str b))))))))
+(defn algebraic->square
+  [s]
+  (let [[col row] (seq s)]
+    (sq/square ({\a 0 \b 1 \c 2 \d 3
+                 \e 4 \f 5 \g 6 \h 7}
+                col)
+               (dec (read-string (str row))))))
 
-(defn pair->algebraic-square
+(defn square->algebraic
   "Returns a string"
   [sq]
   (let [row (sq/row sq)
@@ -35,7 +36,7 @@
                   :black {:king (contains? castling \k)
                           :queen (contains? castling \q)}}
        :en-passant (when-not (= "-" ep)
-                     (algebraic-square->pair ep))
+                     (algebraic->square ep))
        :half-move (read-string half)
        :full-move (read-string full)}
       {:type ::position})))
@@ -58,7 +59,7 @@
                         ({:white "w", :black "b"} turn)
                         (fen-castling castling)
                         (if en-passant
-                          (pair->algebraic-square en-passant)
+                          (square->algebraic en-passant)
                           "-")
                         half-move
                         full-move]))
