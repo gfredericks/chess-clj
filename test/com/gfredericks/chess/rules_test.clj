@@ -327,3 +327,14 @@
 (deftest roundtrips-with-special-moves
   (is (roundtrips? special-moves-pos))
   (is (roundtrips? (assoc special-moves-pos :turn :black))))
+
+(defspec rewindable 10
+  (prop/for-all [moves gen-game-prefix]
+    (let [all-positions (reductions make-move position/initial moves)
+          pairs-with-moves (map list (partition-all 2 1 all-positions) moves)
+          normalize #(dissoc % :half-move :en-passant :castling)]
+      (every? (fn [[[before after] move]]
+                (let [before' (make-unmove after move)]
+                  (and (some #{move} (unmoves after))
+                       (= (normalize before) (normalize before')))))
+              pairs-with-moves))))

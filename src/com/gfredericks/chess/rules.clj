@@ -543,7 +543,7 @@
       (update-in [:board] #(moves/apply-backward move %))
       (assoc :en-passant (moves/backwards-en-passant-square move)
              :turn (other-color turn)
-             :half-move 0 ; TODO
+             :half-move 0 ; TODO; but how?
              )
       ;; (update-in [:castling] moves/update-castling move)
       (cond-> (= turn :white)
