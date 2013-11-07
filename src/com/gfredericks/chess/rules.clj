@@ -75,9 +75,7 @@
 (def normal-knight-moves
   (partial king-and-knight-moves knight-moves))
 
-(def pawn-start-row {:white 1, :black 6})
 (def pawn-direction {:white 1, :black -1})
-(def pawn-penultimate-row {:white 6, :black 1})
 (defn normal-pawn-moves
   [board sq color]
   (let [dir (pawn-direction color)
@@ -86,7 +84,7 @@
         attack-left (sq/translate sq dir -1)
         attack-right (sq/translate sq dir 1)
         opponent (other-color color)
-        promoting? (= (pawn-penultimate-row color) (sq/row sq))
+        promoting? (= (sq/antepromotion-row color) (sq/row sq))
         promotingly #(map % (case color :white [:Q :R :B :N] :black [:q :r :b :n]))
         pawn (board/get board sq)]
     (remove nil?
@@ -96,7 +94,7 @@
                   (promotingly #(moves/->PromotionMove sq forward pawn %))
                   [(moves/->PawnForwardMove sq forward)]))
               (if (and jump
-                       (= (sq/row sq) (pawn-start-row color))
+                       (= (sq/row sq) (sq/pawn-start-row color))
                        (= :_ (board/get board forward))
                        (= :_ (board/get board jump)))
                 [(moves/->PawnForwardMove sq jump)])
