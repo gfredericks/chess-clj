@@ -200,20 +200,35 @@
   (nth coll
        (.nextInt r (count coll))))
 
+(defn gen-moves
+  [pos]
+  (gen/elements (moves pos)))
+
+(defn moves-maybe-progressive
+  [pos]
+  (cond->> (moves pos)
+           (= 50 (:half-move pos))
+           (filter moves/progressive?)))
+
+(defn gen-game-from
+  "Returns a generator for a sequence of moves from the given position."
+  [pos]
+  (let [moves (moves-maybe-progressive pos)]
+    (if (empty? moves)
+      (gen/return ())
+      (gen/bind (gen/elements moves)
+                (fn [move]
+                  (let [pos' (make-move pos move)]
+                    (gen/fmap (fn [moves]
+                                (cons move moves))
+                              (gen-game-from pos'))))))))
+
 (defspec play-a-random-game 10
-  ;; Haxy way to do this: generate a thousand random numbers
-  ;; and use those for seeds to select moves
-  (prop/for-all [seeds (apply gen/tuple
-                              (repeat 1000 (gen/choose 0 1000000)))]
-    (loop [pos position/initial
-           [seed & more] seeds]
-      (let [moves (cond->> (moves pos)
-                           (= 50 (:half-move pos))
-                           (filter moves/progressive?))]
-        (if (empty? moves)
-          :cool
-          (let [move (rand-nth' (java.util.Random. seed) moves)]
-            (recur (make-move pos move) more)))))))
+  (prop/for-all [move-list (gen-game-from position/initial)]
+    (let [final-position (reduce make-move position/initial move-list)
+          status (position-status final-position)]
+      (or (#{:checkmate :stalemate} status)
+          (= 50 (:half-move final-position))))))
 
 
 ;; Moar tests:
