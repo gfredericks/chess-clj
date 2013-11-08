@@ -347,3 +347,35 @@
   (prop/for-all [[pos unmove] gen-position-with-unmove]
     (and (legal-position? pos)
          (legal-position? (make-unmove pos unmove)))))
+
+(def no-backwards-moves-pos
+  ;; A position one of my searches found that (mildly curiously)
+  ;; has no legal backwards moves (because there's no way for
+  ;; that pawn to have moved into the position to check the king).
+  ;; ========================================
+  ;;   ---------------------------------
+  ;; 8 |   |   |   |   |   |   |   |   |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 7 |   |   |   |   |   |   |   |   |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 6 |   |   |   |   |   | Q |   | B |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 5 |   |   | p | k | p |   |   | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 4 | P |   |   | p |   |   |   | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 3 |   |   | K |   |   |   |   | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 2 | p |   | n |   |   |   | r | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 1 | r | b |   |   |   |   |   | B |
+  ;;   ---------------------------------
+  ;;     a   b   c   d   e   f   g   h
+  ;; 1: white to move
+  ;; (Castling: -)
+  ;; half-move: 0
+  ;; ========================================
+  #chess/fen "8/8/5Q1B/2pkp2p/P2p3p/2K4p/p1n3rp/rb5B w - - 0 1")
+
+(deftest no-way-that-king-could-have-been-checked
+  (is (empty? (unmoves no-backwards-moves-pos))))
