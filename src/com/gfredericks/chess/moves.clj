@@ -19,6 +19,9 @@
          as primary-to except in the case of en-passant.")
   (capturedPiece []))
 
+(defprotocol IPromotion
+  (-promoted-to [move] "Returns the piece that the pawn promoted to."))
+
 (defn ^:private move-piece
   [board from-sq to-sq]
   (-> board
@@ -141,7 +144,9 @@
         (b/set to-sq :_)))
   (progressive? [_] true)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IPromotion
+  (-promoted-to [_] promoted-to))
 
 (defrecord PromotionCapture [from-sq to-sq pawn promoted-to captured-piece]
   IMove
@@ -158,7 +163,9 @@
   (primary-to [_] to-sq)
   IAttacking
   (attackingSquare [_] to-sq)
-  (capturedPiece [_] captured-piece))
+  (capturedPiece [_] captured-piece)
+  IPromotion
+  (-promoted-to [_] promoted-to))
 
 (defn en-passant-square
   "If the move is a pawn jump, returns the in-between square.
@@ -224,3 +231,12 @@
   [move]
   (when (capturing? move)
     (.capturedPiece ^IAttacking move)))
+
+(defn promoting-move? [move] (satisfies? IPromotion move))
+
+(defn promoted-to
+  "Returns the piece that the pawn promoted to, or nil if not
+  applicable."
+  [move]
+  (when (promoting-move? move)
+    (-promoted-to move)))

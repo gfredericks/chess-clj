@@ -582,13 +582,52 @@
        (filter #(pieces/color? color %))
        (map pieces/piece-type)))
 
-(defn ^:private filter-by-piece-set-legality
+(defn ^:private remove-first
+  [pred coll]
+  (if-let [[x & xs] (seq coll)]
+    (lazy-seq
+     (if (pred x)
+       xs
+       (cons x (remove-first pred xs))))
+    (throw (ex-info "remove-first called but nothing found"
+                    {:pred pred}))))
+
+(defn ^:private unpromotable-pred
+  [existing-pieces]
+  (->> [:queen :rook :bishop :knight :pawn]
+       (filter #(some #{%} existing-pieces))
+       (filter (fn [piece-type]
+                 (->> existing-pieces
+                      (remove-first #{piece-type})
+                      (cons :pawn)
+                      (legal-piece-set?))))
+       (set)))
+
+(defn ^:private filter-by-unpromote-piece-set-legality
+  "Given a piece-set for the player unmoving and a collection of
+  unmoves, filters out all the moves that unpromote a piece and
+  thereby result in an illegal piece set for the unmoving player."
   [existing-pieces moves]
-  (let [addable?
-        (->> [:queen :rook :bishop :knight :pawn]
-             (filter (fn [piece-type]
-                       (legal-piece-set? (cons piece-type existing-pieces))))
-             (set))]
+  (let [unpromotable? (unpromotable-pred existing-pieces)]
+    (->> moves
+         (filter (fn [move]
+                   (if-let [p (moves/promoted-to move)]
+                     (unpromotable? p)
+                     true))))))
+
+(defn ^:private uncapturable-pred
+  [existing-pieces]
+  (->> [:queen :rook :bishop :knight :pawn]
+       (filter (fn [piece-type]
+                 (legal-piece-set? (cons piece-type existing-pieces))))
+       (set)))
+
+(defn ^:private filter-by-uncapture-piece-set-legality
+  "Given a piece-set for the player NOT unmoving and a collection of unmoves,
+  filters out all the moves that uncapture a piece that would make the
+  not-unmoving player have an illegal piece set."
+  [existing-pieces moves]
+  (let [addable? (uncapturable-pred existing-pieces)]
     (->> moves
          (filter (fn [move]
                    (if-let [p (moves/captured-piece move)]
@@ -609,7 +648,8 @@
          (remove (fn [move]
                    (let [board' (moves/apply-backward move board)]
                      (attacks? board' turn' king-square))))
-         (filter-by-piece-set-legality (piece-set board turn)))))
+         (filter-by-unpromote-piece-set-legality (piece-set board turn'))
+         (filter-by-uncapture-piece-set-legality (piece-set board turn)))))
 
 (defn make-unmove
   [{:keys [board turn half-move] :as pos} move]
