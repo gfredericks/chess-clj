@@ -612,7 +612,7 @@
     (->> moves
          (filter (fn [move]
                    (if-let [p (moves/promoted-to move)]
-                     (unpromotable? p)
+                     (unpromotable? (pieces/piece-type p))
                      true))))))
 
 (defn ^:private uncapturable-pred
