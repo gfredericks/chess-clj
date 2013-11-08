@@ -286,21 +286,25 @@
 ;; Backwards!
 ;;
 
+(def gen-position-with-move
+  (-> (gen/such-that (comp not-empty moves) cgen/position)
+      (gen/bind (fn [pos]
+                  (gen/fmap #(vector pos %)
+                            (gen/elements (moves pos)))))))
+
+(def gen-position-with-unmove
+  (-> (gen/such-that (comp not-empty unmoves) cgen/position)
+      (gen/bind (fn [pos]
+                  (gen/fmap #(vector pos %)
+                            (gen/elements (unmoves pos)))))))
+
 (defspec forwards-backwards-roundtrip 100
-  (prop/for-all [[pos mv] (-> cgen/position
-                              (->> (gen/such-that (comp not-empty moves)))
-                              (gen/bind (fn [pos]
-                                          (gen/fmap #(vector pos %)
-                                                    (gen/elements (moves pos))))))]
+  (prop/for-all [[pos mv] gen-position-with-move]
                 (some #{mv}
                       (unmoves (make-move pos mv)))))
 
 (defspec backwards-forwards-roundtrip 100
-  (prop/for-all [[pos mv] (-> cgen/position
-                              (->> (gen/such-that (comp not-empty unmoves)))
-                              (gen/bind (fn [pos]
-                                          (gen/fmap #(vector pos %)
-                                                    (gen/elements (unmoves pos))))))]
+  (prop/for-all [[pos mv] gen-position-with-unmove]
                 (some #{mv}
                       (moves (make-unmove pos mv)))))
 
@@ -338,3 +342,8 @@
                   (and (some #{move} (unmoves after))
                        (= (normalize before) (normalize before')))))
               pairs-with-moves))))
+
+(defspec backwards-to-legal-positions 100
+  (prop/for-all [[pos unmove] gen-position-with-unmove]
+    (and (legal-position? pos)
+         (legal-position? (make-unmove pos unmove)))))
