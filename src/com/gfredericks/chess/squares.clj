@@ -78,3 +78,40 @@
   (-> sq
       (bit-and 7)
       (bit-or (bit-shift-left row 3))))
+
+;; Rows by role
+
+(defn promotion-row
+  [color]
+  (case color :white 7 :black 0))
+
+(defn antepromotion-row
+  [color]
+  (case color :white 6 :black 1))
+
+(defn post-en-passant-row
+  "The row that a pawn lands on after performing an en-passant move."
+  [color]
+  (case color :white 5 :black 2))
+
+(defn pre-en-passant-row
+  [color]
+  (case color :white 4 :black 3))
+
+(defn pawn-jump-row
+  "The row that pawns jump to on their first move."
+  [color]
+  (case color :white 3 :black 4))
+
+(defn pawn-start-row
+  [color]
+  (case color :white 1 :black 6))
+
+(defn pawn-jump-over-row
+  "The row that pawns jump over."
+  [color]
+  (case color :white 2 :black 5))
+
+(defn back-row
+  [color]
+  (case color :white 0 :black 7))

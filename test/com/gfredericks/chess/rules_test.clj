@@ -2,6 +2,7 @@
   (:require [clojure.set :as sets]
             [clojure.test :refer :all]
             [com.gfredericks.chess.board :as board]
+            [com.gfredericks.chess.generators :as cgen]
             [com.gfredericks.chess.position :as position]
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.rules :refer :all]
@@ -247,6 +248,26 @@
                                 (cons move moves))
                               (gen-game-from pos'))))))))
 
+(def gen-game-prefix
+  "Generates a sequence of moves from the initial position."
+  (gen/bind gen/pos-int
+            (fn f
+              ([move-count]
+                 (f move-count position/initial))
+              ([move-count pos]
+                 (if (zero? move-count)
+                   (gen/return ())
+                   (let [legal-moves (moves pos)]
+                     (if (empty? legal-moves)
+                       (gen/return ())
+                       (gen/bind (gen/elements legal-moves)
+                                 (fn [move]
+                                   (gen/fmap #(cons move %)
+                                    (f (dec move-count) (make-move pos move))))))))))))
+
+(def gen-reachable-pos
+  (gen/fmap #(reduce make-move position/initial %) gen-game-prefix))
+
 (defspec play-a-random-game 10
   (prop/for-all [move-list (gen-game-from position/initial)]
     (let [final-position (reduce make-move position/initial move-list)
@@ -259,3 +280,102 @@
 ;; - test various kinds of check, and how your move choices in
 ;;   a complex position become vastly fewer
 ;; - test promotions
+
+
+;;
+;; Backwards!
+;;
+
+(def gen-position-with-move
+  (-> (gen/such-that (comp not-empty moves) cgen/position)
+      (gen/bind (fn [pos]
+                  (gen/fmap #(vector pos %)
+                            (gen/elements (moves pos)))))))
+
+(def gen-position-with-unmove
+  (-> (gen/such-that (comp not-empty unmoves) cgen/position)
+      (gen/bind (fn [pos]
+                  (gen/fmap #(vector pos %)
+                            (gen/elements (unmoves pos)))))))
+
+(defspec forwards-backwards-roundtrip 100
+  (prop/for-all [[pos mv] gen-position-with-move]
+                (some #{mv}
+                      (unmoves (make-move pos mv)))))
+
+(defspec backwards-forwards-roundtrip 100
+  (prop/for-all [[pos mv] gen-position-with-unmove]
+                (some #{mv}
+                      (moves (make-unmove pos mv)))))
+
+(defn roundtrips?
+  [pos]
+  (let [the-moves (moves pos)
+        the-unmoves (unmoves pos)]
+    (and (every? (fn [move]
+                   (some #{move}
+                         (unmoves (make-move pos move))))
+                 the-moves)
+         (every? (fn [unmove]
+                   (some #{unmove}
+                         (moves (make-unmove pos unmove))))
+                 the-unmoves))))
+
+(defspec reachable-pos-roundtrip 10
+  (prop/for-all [pos gen-reachable-pos]
+    (roundtrips? pos)))
+
+(def special-moves-pos
+  #chess/fen "1n2k2r/P6p/8/5pP1/8/8/8/R3K3 w Qk f6 0 1")
+
+(deftest roundtrips-with-special-moves
+  (is (roundtrips? special-moves-pos))
+  (is (roundtrips? (assoc special-moves-pos :turn :black))))
+
+(defspec rewindable 10
+  (prop/for-all [moves gen-game-prefix]
+    (let [all-positions (reductions make-move position/initial moves)
+          pairs-with-moves (map list (partition-all 2 1 all-positions) moves)
+          normalize #(dissoc % :half-move :en-passant :castling)]
+      (every? (fn [[[before after] move]]
+                (let [before' (make-unmove after move)]
+                  (and (some #{move} (unmoves after))
+                       (= (normalize before) (normalize before')))))
+              pairs-with-moves))))
+
+(defspec backwards-to-legal-positions 100
+  (prop/for-all [[pos unmove] gen-position-with-unmove]
+    (and (legal-position? pos)
+         (legal-position? (make-unmove pos unmove)))))
+
+(def no-backwards-moves-pos
+  ;; A position one of my searches found that (mildly curiously)
+  ;; has no legal backwards moves (because there's no way for
+  ;; that pawn to have moved into the position to check the king).
+  ;; ========================================
+  ;;   ---------------------------------
+  ;; 8 |   |   |   |   |   |   |   |   |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 7 |   |   |   |   |   |   |   |   |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 6 |   |   |   |   |   | Q |   | B |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 5 |   |   | p | k | p |   |   | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 4 | P |   |   | p |   |   |   | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 3 |   |   | K |   |   |   |   | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 2 | p |   | n |   |   |   | r | p |
+  ;;   +---+---+---+---+---+---+---+---+
+  ;; 1 | r | b |   |   |   |   |   | B |
+  ;;   ---------------------------------
+  ;;     a   b   c   d   e   f   g   h
+  ;; 1: white to move
+  ;; (Castling: -)
+  ;; half-move: 0
+  ;; ========================================
+  #chess/fen "8/8/5Q1B/2pkp2p/P2p3p/2K4p/p1n3rp/rb5B w - - 0 1")
+
+(deftest no-way-that-king-could-have-been-checked
+  (is (empty? (unmoves no-backwards-moves-pos))))

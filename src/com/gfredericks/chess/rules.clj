@@ -75,7 +75,6 @@
 (def normal-knight-moves
   (partial king-and-knight-moves knight-moves))
 
-(def pawn-start-row {:white 1, :black 6})
 (def pawn-direction {:white 1, :black -1})
 (def pawn-penultimate-row {:white 6, :black 1})
 (defn normal-pawn-moves
@@ -96,7 +95,7 @@
                   (promotingly #(moves/->PromotionMove sq forward pawn %))
                   [(moves/->PawnForwardMove sq forward)]))
               (if (and jump
-                       (= (sq/row sq) (pawn-start-row color))
+                       (= (sq/row sq) (sq/pawn-start-row color))
                        (= :_ (board/get board forward))
                        (= :_ (board/get board jump)))
                 [(moves/->PawnForwardMove sq jump)])
@@ -365,3 +364,301 @@
       :checkmate
       :stalemate)
     :ongoing))
+
+
+;;
+;; Static position legality
+;;
+
+(defn ^:private legal-piece-set?
+  [pieces]
+  (let [{:keys [king queen rook bishop knight pawn]
+         :or {king 0, queen 0, rook 0, bishop 0, knight 0, pawn 0}}
+        (frequencies pieces),
+        extras (apply + (filter pos? [(dec queen)
+                                      (- rook 2)
+                                      (- bishop 2)
+                                      (- knight 2)]))]
+    (and (= 1 king)
+         (<= (+ extras pawn) 8))))
+
+;; TODO:
+;;   - bishop colors
+;;   - castling consistency
+;;   - en-passant consistency
+(defn legal-position?
+  "Checks if a position is legal by different static criteria. This
+  should hopefully cover all the assumptions that we make elsewhere in
+  this namespace."
+  [{:keys [board turn half-move full-move castling en-passant]}]
+  (let [placements (board/piece-placements board)
+        pieces (map second placements)
+        [[white-king-sq] :as white-kings] (filter (comp #{:K} second) placements)
+        [[black-king-sq] :as black-kings] (filter (comp #{:k} second) placements)
+        {white-pieces :white, black-pieces :black} (group-by pieces/piece-color pieces)]
+    (and (= 1 (count black-kings))
+         (= 1 (count white-kings))
+         (#{:white :black} turn)
+         (integer? half-move)
+         (integer? full-move)
+         ;; moving player isn't checking
+         (not (attacks? board turn (case turn :white black-king-sq :black white-king-sq)))
+         ;; no pawns on the extreme rows
+         (not-any? (fn [[sq p]]
+                     (and (#{0 7} (sq/row sq))
+                          (#{:p :P} p)))
+                   placements)
+         (->> white-pieces
+              (map pieces/piece-type)
+              (legal-piece-set?))
+         (->> black-pieces
+              (map pieces/piece-type)
+              (legal-piece-set?)))))
+
+
+;;
+;; Backwards moves!
+;;
+
+(def not-kings
+  {:white [:P :N :B :R :Q]
+   :black [:p :n :b :r :q]})
+
+(defn ray-unmoves
+  [directions board sq unmoving-color]
+  (let [extreme-row? (case (sq/row sq) 0 true 7 true false)]
+    (for [dir directions
+          blank-sq (take-while #(= :_ (board/get board %)) (sqs-in-dir sq dir))
+          captured-piece (cons :_ (not-kings (other-color unmoving-color)))
+          :when (not (and extreme-row? (pieces/pawn? captured-piece)))]
+      (if (= :_ captured-piece)
+        (moves/->BasicMove blank-sq sq)
+        (moves/->BasicCaptureMove blank-sq sq captured-piece)))))
+
+(defn king-and-knight-unmoves
+  [dirs board sq unmoving-color]
+  (let [extreme-row? (case (sq/row sq) 0 true 7 true false)]
+    (for [blank-sq (king-and-knight-squares dirs sq)
+          :let [entry (board/get board blank-sq)]
+          :when (= :_ entry)
+          captured-piece (cons :_ (not-kings (other-color unmoving-color)))
+          :when (not (and extreme-row? (pieces/pawn? captured-piece)))]
+      (if (= :_ captured-piece)
+        (moves/->BasicMove blank-sq sq)
+        (moves/->BasicCaptureMove blank-sq sq captured-piece)))))
+
+(def normal-king-unmoves
+  (partial king-and-knight-unmoves all-standard-movements))
+(def normal-queen-unmoves
+  (partial ray-unmoves all-standard-movements))
+(def normal-rook-unmoves
+  (partial ray-unmoves rectilinear-movements))
+(def normal-bishop-unmoves
+  (partial ray-unmoves diagonal-movements))
+(def normal-knight-unmoves
+  (partial king-and-knight-unmoves knight-moves))
+
+(defn normal-pawn-unmoves
+  [board sq unmoving-color]
+  (when (not= (sq/pawn-start-row unmoving-color)
+              (sq/row sq))
+    (let [dir (- (pawn-direction unmoving-color))
+          backward (sq/translate-row sq dir)
+          jump (sq/translate-row backward dir)
+          attack-left (sq/translate sq dir -1)
+          attack-right (sq/translate sq dir 1)
+          opponent (other-color unmoving-color)]
+      (remove nil?
+              (apply concat
+                     [(if (= :_ (board/get board backward))
+                        [(moves/->PawnForwardMove backward sq)])
+                      (if (and jump
+                               (= (sq/row jump) (sq/pawn-start-row unmoving-color))
+                               (= :_ (board/get board backward))
+                               (= :_ (board/get board jump)))
+                        [(moves/->PawnForwardMove jump sq)])
+                      (if-let [p (and attack-left (board/get board attack-left))]
+                        (when (= :_ p)
+                          (for [captured-piece (not-kings opponent)]
+                            (moves/->PawnCaptureMove attack-left sq captured-piece))))
+                      (if-let [p (and attack-right (board/get board attack-right))]
+                        (when (= :_ p)
+                          (for [captured-piece (not-kings opponent)]
+                            (moves/->PawnCaptureMove attack-right sq captured-piece))))])))))
+
+(defn normal-unmoves-for-piece
+  [board piece color sq]
+  ((case (pieces/piece-type piece)
+     :king normal-king-unmoves
+     :queen normal-queen-unmoves
+     :rook normal-rook-unmoves
+     :bishop normal-bishop-unmoves
+     :knight normal-knight-unmoves
+     :pawn normal-pawn-unmoves)
+   board
+   sq
+   color))
+
+(defn normal-unmoves
+  [board unmoving-color]
+  (for [[sq p] (board/piece-placements board)
+        :when (pieces/color? unmoving-color p)
+        mv (normal-unmoves-for-piece board p unmoving-color sq)]
+    mv))
+
+(defn promotional-unmoves
+  [board unmoving-color]
+  (let [row (sq/promotion-row unmoving-color)]
+    (for [col (range 8)
+          :let [sq (sq/square col row)
+                p (board/get board sq)
+                pawn (case unmoving-color :white :P :black :p)]
+          :when (pieces/color? unmoving-color p)
+          :when (not (or (pieces/king? p) (pieces/pawn? p)))
+          :let [center (sq/set-row sq (sq/antepromotion-row unmoving-color))
+                left (sq/translate-col center -1)
+                right (sq/translate-col center 1)
+                capturables (remove pieces/pawn?
+                                    (not-kings (other-color unmoving-color)))]
+          move (concat
+                (when (pieces/blank? (board/get board center))
+                  [(moves/->PromotionMove center sq pawn p)])
+                (when (and left
+                           (pieces/blank? (board/get board left)))
+                  (for [captured-piece capturables]
+                    (moves/->PromotionCapture left sq pawn p captured-piece)))
+                (when (and right
+                           (pieces/blank? (board/get board right)))
+                  (for [captured-piece capturables]
+                    (moves/->PromotionCapture right sq pawn p captured-piece))))]
+      move)))
+
+(defn castling-unmoves
+  [board unmoving-color]
+  (let [back-row (sq/back-row unmoving-color)
+
+        king-piece (case unmoving-color :white :K :black :k)
+        rook-piece (case unmoving-color :white :R :black :r)
+
+        [queen-rook queen-knight queen-bishop queen king king-bishop king-knight king-rook]
+        (map #(sq/square % back-row) (range 8))
+
+        blank? #(= :_ (board/get board %))]
+    (filter identity
+            [(and (= king-piece (board/get board queen-bishop))
+                  (= rook-piece (board/get board queen))
+                  (blank? queen-rook)
+                  (blank? queen-knight)
+                  (blank? king)
+                  (moves/->CastlingMove queen-rook))
+             (and (= king-piece (board/get board king-knight))
+                  (= rook-piece (board/get board king-bishop))
+                  (blank? king-rook)
+                  (blank? king)
+                  (moves/->CastlingMove king-rook))])))
+
+(defn en-passant-unmoves
+  [board unmoving-color]
+  (let [moved-to-row (sq/post-en-passant-row unmoving-color)
+        moved-from-row (sq/pre-en-passant-row unmoving-color)]
+    (for [col (range 8)
+          :let [moved-to (sq/square col moved-to-row)
+                p (board/get board moved-to)]
+          :when (and (pieces/pawn? p)
+                     (pieces/color? unmoving-color p))
+          :let [captured-sq (sq/square col moved-from-row)]
+          :when (pieces/blank? (board/get board captured-sq))
+          sideways [-1 1]
+          :let [moved-from (sq/translate-col captured-sq sideways)]
+          :when (and moved-from
+                     (pieces/blank? (board/get board moved-from)))
+          :let [captured-pawn (case unmoving-color :white :p :black :P)]]
+      (moves/->EnPassantMove moved-from moved-to captured-sq captured-pawn))))
+
+(defn ^:private piece-set
+  [board color]
+  (->> (board/piece-placements board)
+       (map second)
+       (filter #(pieces/color? color %))
+       (map pieces/piece-type)))
+
+(defn ^:private remove-first
+  [pred coll]
+  (if-let [[x & xs] (seq coll)]
+    (lazy-seq
+     (if (pred x)
+       xs
+       (cons x (remove-first pred xs))))
+    (throw (ex-info "remove-first called but nothing found"
+                    {:pred pred}))))
+
+(defn ^:private unpromotable-pred
+  [existing-pieces]
+  (->> [:queen :rook :bishop :knight :pawn]
+       (filter #(some #{%} existing-pieces))
+       (filter (fn [piece-type]
+                 (->> existing-pieces
+                      (remove-first #{piece-type})
+                      (cons :pawn)
+                      (legal-piece-set?))))
+       (set)))
+
+(defn ^:private filter-by-unpromote-piece-set-legality
+  "Given a piece-set for the player unmoving and a collection of
+  unmoves, filters out all the moves that unpromote a piece and
+  thereby result in an illegal piece set for the unmoving player."
+  [existing-pieces moves]
+  (let [unpromotable? (unpromotable-pred existing-pieces)]
+    (->> moves
+         (filter (fn [move]
+                   (if-let [p (moves/promoted-to move)]
+                     (unpromotable? (pieces/piece-type p))
+                     true))))))
+
+(defn ^:private uncapturable-pred
+  [existing-pieces]
+  (->> [:queen :rook :bishop :knight :pawn]
+       (filter (fn [piece-type]
+                 (legal-piece-set? (cons piece-type existing-pieces))))
+       (set)))
+
+(defn ^:private filter-by-uncapture-piece-set-legality
+  "Given a piece-set for the player NOT unmoving and a collection of unmoves,
+  filters out all the moves that uncapture a piece that would make the
+  not-unmoving player have an illegal piece set."
+  [existing-pieces moves]
+  (let [addable? (uncapturable-pred existing-pieces)]
+    (->> moves
+         (filter (fn [move]
+                   (if-let [p (moves/captured-piece move)]
+                     (addable? (pieces/piece-type p))
+                     true))))))
+
+;; TODO: positions with an en-passant square should only return a
+;; single possible move.
+(defn unmoves
+  "Returns all legal backwards moves."
+  [{:keys [board turn], :as pos}]
+  (let [turn' (other-color turn)
+        king-square (king-square board turn)]
+    (->> (concat (normal-unmoves board turn')
+                 (promotional-unmoves board turn')
+                 (castling-unmoves board turn')
+                 (en-passant-unmoves board turn'))
+         (remove (fn [move]
+                   (let [board' (moves/apply-backward move board)]
+                     (attacks? board' turn' king-square))))
+         (filter-by-unpromote-piece-set-legality (piece-set board turn'))
+         (filter-by-uncapture-piece-set-legality (piece-set board turn)))))
+
+(defn make-unmove
+  [{:keys [board turn half-move] :as pos} move]
+  (-> pos
+      (update-in [:board] #(moves/apply-backward move %))
+      (assoc :en-passant (moves/backwards-en-passant-square move)
+             :turn (other-color turn)
+             :half-move 0 ; TODO; but how?
+             )
+      ;; (update-in [:castling] moves/update-castling move)
+      (cond-> (= turn :white)
+              (update-in [:full-move] dec))))
