@@ -16,7 +16,8 @@
 (definterface IAttacking
   (^long attackingSquare []
          "Returns the square being attacked. This is almost always the same
-         as primary-to except in the case of en-passant."))
+         as primary-to except in the case of en-passant.")
+  (capturedPiece []))
 
 (defn ^:private move-piece
   [board from-sq to-sq]
@@ -48,7 +49,8 @@
   (primary-from [_] from-sq)
   (primary-to [_] to-sq)
   IAttacking
-  (attackingSquare [_] to-sq))
+  (attackingSquare [_] to-sq)
+  (capturedPiece [_] captured-piece))
 
 (defrecord PawnForwardMove [from-sq to-sq]
   IMove
@@ -72,7 +74,8 @@
   (primary-from [_] from-sq)
   (primary-to [_] to-sq)
   IAttacking
-  (attackingSquare [_] to-sq))
+  (attackingSquare [_] to-sq)
+  (capturedPiece [_] captured-piece))
 
 ;; Some helpers for CastlingMove
 (defn ^:private king-from
@@ -123,7 +126,8 @@
   (primary-from [_] from-sq)
   (primary-to [_] to-sq)
   IAttacking
-  (attackingSquare [_] capture-square))
+  (attackingSquare [_] capture-square)
+  (capturedPiece [_] captured-piece))
 
 (defrecord PromotionMove [from-sq to-sq pawn promoted-to]
   IMove
@@ -153,7 +157,8 @@
   (primary-from [_] from-sq)
   (primary-to [_] to-sq)
   IAttacking
-  (attackingSquare [_] to-sq))
+  (attackingSquare [_] to-sq)
+  (capturedPiece [_] captured-piece))
 
 (defn en-passant-square
   "If the move is a pawn jump, returns the in-between square.
@@ -208,7 +213,14 @@
           (update-castling' from)
           (update-castling' to)))))
 
+(defn capturing? [move] (instance? IAttacking move))
+
 (defn attacking-square
   [move]
-  (when (instance? IAttacking move)
+  (when (capturing? move)
     (.attackingSquare ^IAttacking move)))
+
+(defn captured-piece
+  [move]
+  (when (capturing? move)
+    (.capturedPiece ^IAttacking move)))
