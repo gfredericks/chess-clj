@@ -401,13 +401,13 @@
          (#{:white :black} turn)
          (integer? half-move)
          (integer? full-move)
-         ;; moving player isn't checking
-         (not (attacks? board turn (case turn :white black-king-sq :black white-king-sq)))
          ;; no pawns on the extreme rows
          (not-any? (fn [[sq p]]
                      (and (#{0 7} (sq/row sq))
                           (#{:p :P} p)))
                    placements)
+         ;; moving player isn't checking
+         (not (attacks? board turn (case turn :white black-king-sq :black white-king-sq)))
          (->> white-pieces
               (map pieces/piece-type)
               (legal-piece-set?))

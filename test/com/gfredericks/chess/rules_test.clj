@@ -379,3 +379,6 @@
 
 (deftest no-way-that-king-could-have-been-checked
   (is (empty? (unmoves no-backwards-moves-pos))))
+
+(deftest this-call-should-not-crash
+  (is (false? (legal-position? #chess/fen "P1r5/3B4/1p6/3p4/2RP3K/8/8/k7 w - - 0 0"))))
