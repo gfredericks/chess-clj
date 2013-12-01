@@ -115,3 +115,10 @@
 (defn back-row
   [color]
   (case color :white 0 :black 7))
+
+(defn square-color
+  "Returns :light or :dark."
+  [sq]
+  (if (even? (+ (row sq) (col sq)))
+    :dark
+    :light))

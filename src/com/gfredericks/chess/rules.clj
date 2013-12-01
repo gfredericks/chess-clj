@@ -370,20 +370,60 @@
 ;; Static position legality
 ;;
 
+(defn ^:private convert-piece-type
+  "Given a piece type and a square, returns the same piece type but
+  with :bishop converted to :light-bishop or :dark-bishop as
+  appropriate."
+  [piece-type square]
+  (if (= :bishop piece-type)
+    (case (sq/square-color square)
+      :light :light-bishop
+      :dark :dark-bishop)
+    piece-type))
+
 (defn ^:private legal-piece-set?
+  "Given a collection of piece types (which should use either :bishop
+  or :light-bishop/:dark-bishop but not both), checks if that piece
+  set is reachable from the starting position."
   [pieces]
-  (let [{:keys [king queen rook bishop knight pawn]
-         :or {king 0, queen 0, rook 0, bishop 0, knight 0, pawn 0}}
-        (frequencies pieces),
-        extras (apply + (filter pos? [(dec queen)
-                                      (- rook 2)
-                                      (- bishop 2)
-                                      (- knight 2)]))]
-    (and (= 1 king)
-         (<= (+ extras pawn) 8))))
+  (let [freqs (frequencies pieces)
+        p #(get freqs % 0)
+
+        extras (apply + (filter pos? [(dec (p :queen))
+                                      (- (p :rook) 2)
+                                      (- (p :bishop) 2)
+                                      (dec (p :light-bishop))
+                                      (dec (p :dark-bishop))
+                                      (- (p :knight) 2)]))]
+    (assert (or (not (contains? freqs :bishop))
+                (and (not (contains? freqs :light-bishop))
+                     (not (contains? freqs :dark-bishop)))))
+
+    (and (= 1 (p :king))
+         (<= (+ extras (p :pawn)) 8))))
+
+(defn legal-piece-sets?
+  "Given a collection of piece placements as returned from board/piece-placements,
+  checks that both colors have legal piece sets (including bishop
+  square colors)."
+  [placements]
+  (let [piece-types-and-colors
+        (map (fn [[sq piece]]
+               (let [c (pieces/piece-color piece)
+                     t (pieces/piece-type piece)]
+                 [(convert-piece-type t sq) c]))
+             placements)
+
+        color-has-legal-piece-set?
+        (fn [color]
+          (->> piece-types-and-colors
+               (filter (comp #(= % color) second))
+               (map first)
+               (legal-piece-set?)))]
+    (and (color-has-legal-piece-set? :white)
+         (color-has-legal-piece-set? :black))))
 
 ;; TODO:
-;;   - bishop colors
 ;;   - castling consistency
 ;;   - en-passant consistency
 (defn legal-position?
@@ -392,10 +432,9 @@
   this namespace."
   [{:keys [board turn half-move full-move castling en-passant]}]
   (let [placements (board/piece-placements board)
-        pieces (map second placements)
+
         [[white-king-sq] :as white-kings] (filter (comp #{:K} second) placements)
-        [[black-king-sq] :as black-kings] (filter (comp #{:k} second) placements)
-        {white-pieces :white, black-pieces :black} (group-by pieces/piece-color pieces)]
+        [[black-king-sq] :as black-kings] (filter (comp #{:k} second) placements)]
     (and (= 1 (count black-kings))
          (= 1 (count white-kings))
          (#{:white :black} turn)
@@ -408,12 +447,7 @@
                    placements)
          ;; moving player isn't checking
          (not (attacks? board turn (case turn :white black-king-sq :black white-king-sq)))
-         (->> white-pieces
-              (map pieces/piece-type)
-              (legal-piece-set?))
-         (->> black-pieces
-              (map pieces/piece-type)
-              (legal-piece-set?)))))
+         (legal-piece-sets? placements))))
 
 
 ;;
@@ -576,11 +610,15 @@
       (moves/->EnPassantMove moved-from moved-to captured-sq captured-pawn))))
 
 (defn ^:private piece-set
+  "Returns the set of piece types for the given color,
+  using :light-bishop and :dark-bishop instead of :bishop."
   [board color]
   (->> (board/piece-placements board)
-       (map second)
-       (filter #(pieces/color? color %))
-       (map pieces/piece-type)))
+       (map (fn [[sq p]]
+              [sq (pieces/piece-color p) (pieces/piece-type p)]))
+       (filter #(= color (second %)))
+       (map (fn [[sq _c piece-type]]
+              (convert-piece-type piece-type sq)))))
 
 (defn ^:private remove-first
   [pred coll]
@@ -607,8 +645,13 @@
   "Given a piece-set for the player unmoving and a collection of
   unmoves, filters out all the moves that unpromote a piece and
   thereby result in an illegal piece set for the unmoving player."
-  [existing-pieces moves]
-  (let [unpromotable? (unpromotable-pred existing-pieces)]
+  [existing-pieces' moves]
+  (let [existing-pieces (map #(case %
+                                :light-bishop :bishop
+                                :dark-bishop :bishop
+                                %)
+                             existing-pieces')
+        unpromotable? (unpromotable-pred existing-pieces)]
     (->> moves
          (filter (fn [move]
                    (if-let [p (moves/promoted-to move)]
@@ -617,7 +660,7 @@
 
 (defn ^:private uncapturable-pred
   [existing-pieces]
-  (->> [:queen :rook :bishop :knight :pawn]
+  (->> [:queen :rook :light-bishop :dark-bishop :knight :pawn]
        (filter (fn [piece-type]
                  (legal-piece-set? (cons piece-type existing-pieces))))
        (set)))
@@ -631,7 +674,9 @@
     (->> moves
          (filter (fn [move]
                    (if-let [p (moves/captured-piece move)]
-                     (addable? (pieces/piece-type p))
+                     (let [piece-type (convert-piece-type (pieces/piece-type p)
+                                                          (moves/attacking-square move))]
+                       (addable? piece-type))
                      true))))))
 
 ;; TODO: positions with an en-passant square should only return a

@@ -37,11 +37,10 @@
 ;; TODO: also check the colors of the bishops?
 (defn ^:private legal-position-piece-sets?
   [pos]
-  (let [pieces (->> pos (:board) (board/piece-placements) (map second))
-        whites (filter #{:K :Q :R :B :N :P} pieces)
-        blacks (filter #{:k :q :r :b :n :p} pieces)]
-    (and (legal-piece-set? whites)
-         (legal-piece-set? blacks))))
+  (-> pos
+      (:board)
+      (board/piece-placements)
+      (rules/legal-piece-sets?)))
 
 (defn ^:private legal-position-pawns?
   "Checks if there are any pawns on the back ranks."

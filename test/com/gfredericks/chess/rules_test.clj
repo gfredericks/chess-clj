@@ -382,3 +382,12 @@
 
 (deftest this-call-should-not-crash
   (is (false? (legal-position? #chess/fen "P1r5/3B4/1p6/3p4/2RP3K/8/8/k7 w - - 0 0"))))
+
+(deftest bishop-color-test
+  (let [nine-light-bishops-and-one-dark
+        #chess/fen "k7/8/8/8/B1B5/1B1B4/B1B1B3/1B1BB2K w - - 0 0"
+
+        ten-light-bishops
+        #chess/fen "k7/8/8/8/B1B5/1B1B4/B1B1B3/1B1B1B1K w - - 0 0"]
+    (is (legal-position? nine-light-bishops-and-one-dark))
+    (is (not (legal-position? ten-light-bishops)))))

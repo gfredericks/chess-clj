@@ -40,6 +40,10 @@
   [p]
   (case p :K true :k true false))
 
+(defn bishop?
+  [p]
+  (case p :B true :b true false))
+
 (defn blank?
   [p]
   (= :_ p))
