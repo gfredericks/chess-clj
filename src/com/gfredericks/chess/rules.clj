@@ -1,7 +1,5 @@
 (ns com.gfredericks.chess.rules
-  "Which moves are legal and such.
-
-  A move is just a [from-square to-square]."
+  "Which moves are legal and such."
   (:require [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]
