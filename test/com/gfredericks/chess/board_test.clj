@@ -3,9 +3,9 @@
   (:require [com.gfredericks.chess.board :refer :all]
             [com.gfredericks.chess.generators :as cgen]
             [com.gfredericks.chess.squares :as sq]
-            [simple-check.generators :as gen]
-            [simple-check.properties :as prop]
-            [simple-check.clojure-test :refer [defspec]]))
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [clojure.test.check.clojure-test :refer [defspec]]))
 
 (def gen-two-different-squares
   (gen/such-that #(not= (first %) (second %))

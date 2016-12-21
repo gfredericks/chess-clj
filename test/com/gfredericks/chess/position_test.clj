@@ -1,9 +1,9 @@
 (ns com.gfredericks.chess.position-test
   (:require [com.gfredericks.chess.position :refer :all]
             [com.gfredericks.chess.generators :as cgen]
-            [simple-check.generators :as gen]
-            [simple-check.properties :as prop]
-            [simple-check.clojure-test :refer [defspec]]))
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [clojure.test.check.clojure-test :refer [defspec]]))
 
 (def gen-position
   "Generates a naive position."

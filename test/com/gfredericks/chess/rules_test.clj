@@ -7,9 +7,9 @@
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.rules :refer :all]
             [com.gfredericks.chess.squares :refer :all]
-            [simple-check.generators :as gen]
-            [simple-check.properties :as prop]
-            [simple-check.clojure-test :refer [defspec]]))
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
+            [clojure.test.check.clojure-test :refer [defspec]]))
 
 (def fromto (juxt moves/primary-from moves/primary-to))
 

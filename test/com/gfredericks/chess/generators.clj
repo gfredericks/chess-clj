@@ -5,7 +5,7 @@
             [com.gfredericks.chess.position :as position]
             [com.gfredericks.chess.rules :as rules]
             [com.gfredericks.chess.squares :as sq]
-            [simple-check.generators :as gen]))
+            [clojure.test.check.generators :as gen]))
 
 (def square
   (gen/elements sq/all-squares))
@@ -190,3 +190,27 @@
   {:gen (fn [rnd size]
           (let [pos (random-position rnd)]
             [pos (position-shrinks pos)]))})
+
+(defn ^:private gen-position-from-random-game*
+  [moves-left pos]
+  (if (zero? moves-left)
+    (gen/return pos)
+    (if-let [moves (seq (rules/moves pos))]
+      (gen/let [move (gen/elements moves)]
+        (gen-position-from-random-game* (dec moves-left) (rules/make-move pos move)))
+      (gen/return pos))))
+
+(def gen-position-from-random-game
+  (gen/let [move-count (gen/scale #(* 2 %) gen/nat)]
+    (gen-position-from-random-game* move-count position/initial)))
+
+(def gen-two-kings-position
+  "Generates a random legal position with just two kings."
+  )
+
+#_
+(def gen-position-from-random-placements
+  (gen/let [[init-pos changes]]))
+
+(def position
+  gen-position-from-random-game)
