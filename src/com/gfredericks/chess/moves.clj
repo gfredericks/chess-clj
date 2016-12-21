@@ -1,5 +1,6 @@
 (ns com.gfredericks.chess.moves
-  (:require [com.gfredericks.chess.board :as b]
+  (:require [clojure.spec :as s]
+            [com.gfredericks.chess.board :as b]
             [com.gfredericks.chess.pieces :as pieces]
             [com.gfredericks.chess.squares :as sq]))
 
@@ -12,6 +13,8 @@
     "Returns the square the piece being moved is moving from.")
   (primary-to [move]
     "Returns the square the piece being moved is moving to."))
+
+(def move? #(satisfies? IMove %))
 
 (definterface IAttacking
   (^long attackingSquare []

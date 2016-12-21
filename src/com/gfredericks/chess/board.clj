@@ -1,7 +1,10 @@
 (ns com.gfredericks.chess.board
   (:refer-clojure :exclude [get set])
   (:require [clojure.core :as core]
+            [clojure.spec :as s]
             [com.gfredericks.chess.squares :as sq]))
+
+(s/def ::board any?)
 
 (declare board->fen-board)
 

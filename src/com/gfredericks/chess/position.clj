@@ -1,7 +1,21 @@
 (ns com.gfredericks.chess.position
-  (:require [clojure.string :as s]
+  (:require [clojure.spec :as s]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.squares :as sq]))
+
+(s/def ::position
+  (s/keys :req-un [::board/board ::turn ::castling ::en-passant ::half-move ::full-move]))
+(s/def ::turn #{:white :black})
+(defn castling-flags?
+  [m]
+  (and (= #{:white :black} (set (keys m)))
+       (every? (fn [m] (and (= #{:king :queen} (set (keys m)))
+                            (every? boolean? (vals m))))
+               (vals m))))
+(s/def ::castling castling-flags?)
+(s/def ::en-passant (s/nilable ::sq/square))
+(s/def ::half-move integer?)
+(s/def ::full-move integer?)
 
 (defn- vecs
   [coll]

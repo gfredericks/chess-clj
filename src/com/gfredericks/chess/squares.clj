@@ -1,6 +1,9 @@
 (ns com.gfredericks.chess.squares
   "Code for handling the 64 squares on the board. Defines a public var
-  for each square in algebraic notation (a1 -> h8)")
+  for each square in algebraic notation (a1 -> h8)"
+  (:require [clojure.spec :as s]))
+
+(s/def ::square (s/and integer? #(<= 0 % 63)))
 
 (defn square
   "Given col and row which are as returned by the col and row functions,

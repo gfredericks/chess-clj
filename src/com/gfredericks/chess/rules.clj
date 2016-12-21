@@ -1,9 +1,10 @@
 (ns com.gfredericks.chess.rules
   "Which moves are legal and such."
-  (:require [com.gfredericks.chess.board :as board]
+  (:require [clojure.spec :as s]
+            [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]
-            [com.gfredericks.chess.position] ;; need this for data readers
+            [com.gfredericks.chess.position :as position]
             [com.gfredericks.chess.squares :as sq]))
 
 (def other-color {:white :black, :black :white})
@@ -702,6 +703,9 @@
 
 ;; TODO: positions with an en-passant square should only return a
 ;; single possible move.
+(s/fdef unmoves
+        :args (s/cat :pos ::position/position)
+        :ret (s/coll-of moves/move?))
 (defn unmoves
   "Returns all legal backwards moves."
   [{:keys [board turn en-passant castling], :as pos}]
