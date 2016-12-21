@@ -421,9 +421,6 @@
     (and (color-has-legal-piece-set? :white)
          (color-has-legal-piece-set? :black))))
 
-;; TODO:
-;;   - castling consistency
-;;   - en-passant consistency
 (defn legal-position?
   "Checks if a position is legal by different static criteria. This
   should hopefully cover all the assumptions that we make elsewhere in
@@ -445,7 +442,29 @@
                    placements)
          ;; moving player isn't checking
          (not (attacks? board turn (case turn :white black-king-sq :black white-king-sq)))
-         (legal-piece-sets? placements))))
+         (legal-piece-sets? placements)
+         ;; castling flags are plausible
+         (or (not (get-in castling [:white :king]))
+             (= [:K :R] [(board/get board #=(sq/square 4 0))
+                         (board/get board #=(sq/square 7 0))]))
+         (or (not (get-in castling [:white :queen]))
+             (= [:K :R] [(board/get board #=(sq/square 4 0))
+                         (board/get board #=(sq/square 0 0))]))
+         (or (not (get-in castling [:black :king]))
+             (= [:k :r] [(board/get board #=(sq/square 4 7))
+                         (board/get board #=(sq/square 7 7))]))
+         (or (not (get-in castling [:black :queen]))
+             (= [:k :r] [(board/get board #=(sq/square 4 7))
+                         (board/get board #=(sq/square 0 7))]))
+         ;; en-passant flag is plausible
+         (or (nil? en-passant)
+             (let [row (sq/row en-passant)
+                   col (sq/col en-passant)]
+               (and (= :_ (board/get board en-passant))
+                    (case row
+                      2 (= :P (board/get board (sq/translate-row en-passant 1)))
+                      5 (= :p (board/get board (sq/translate-row en-passant -1)))
+                      false)))))))
 
 
 ;;

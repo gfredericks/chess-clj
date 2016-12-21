@@ -348,6 +348,10 @@
     (and (legal-position? pos)
          (legal-position? (make-unmove pos unmove)))))
 
+(defspec reachable-positions-are-legal 100
+  (prop/for-all [pos cgen/gen-position-from-random-game]
+    (legal-position? pos)))
+
 (def no-backwards-moves-pos
   ;; A position one of my searches found that (mildly curiously)
   ;; has no legal backwards moves (because there's no way for
