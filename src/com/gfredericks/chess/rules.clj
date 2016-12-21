@@ -421,6 +421,21 @@
     (and (color-has-legal-piece-set? :white)
          (color-has-legal-piece-set? :black))))
 
+(defn ^:private KR-positions-consistent-with-castling?
+  [board castling]
+  (or (not (get-in castling [:white :king]))
+      (= [:K :R] [(board/get board #=(sq/square 4 0))
+                  (board/get board #=(sq/square 7 0))]))
+  (or (not (get-in castling [:white :queen]))
+      (= [:K :R] [(board/get board #=(sq/square 4 0))
+                  (board/get board #=(sq/square 0 0))]))
+  (or (not (get-in castling [:black :king]))
+      (= [:k :r] [(board/get board #=(sq/square 4 7))
+                  (board/get board #=(sq/square 7 7))]))
+  (or (not (get-in castling [:black :queen]))
+      (= [:k :r] [(board/get board #=(sq/square 4 7))
+                  (board/get board #=(sq/square 0 7))])))
+
 (defn legal-position?
   "Checks if a position is legal by different static criteria. This
   should hopefully cover all the assumptions that we make elsewhere in
@@ -444,18 +459,7 @@
          (not (attacks? board turn (case turn :white black-king-sq :black white-king-sq)))
          (legal-piece-sets? placements)
          ;; castling flags are plausible
-         (or (not (get-in castling [:white :king]))
-             (= [:K :R] [(board/get board #=(sq/square 4 0))
-                         (board/get board #=(sq/square 7 0))]))
-         (or (not (get-in castling [:white :queen]))
-             (= [:K :R] [(board/get board #=(sq/square 4 0))
-                         (board/get board #=(sq/square 0 0))]))
-         (or (not (get-in castling [:black :king]))
-             (= [:k :r] [(board/get board #=(sq/square 4 7))
-                         (board/get board #=(sq/square 7 7))]))
-         (or (not (get-in castling [:black :queen]))
-             (= [:k :r] [(board/get board #=(sq/square 4 7))
-                         (board/get board #=(sq/square 0 7))]))
+         (KR-positions-consistent-with-castling? board castling)
          ;; en-passant flag is plausible
          (or (nil? en-passant)
              (let [row (sq/row en-passant)
@@ -700,7 +704,7 @@
 ;; single possible move.
 (defn unmoves
   "Returns all legal backwards moves."
-  [{:keys [board turn], :as pos}]
+  [{:keys [board turn en-passant castling], :as pos}]
   (let [turn' (other-color turn)
         king-square (king-square board turn)]
     (->> (concat (normal-unmoves board turn')
@@ -709,18 +713,26 @@
                  (en-passant-unmoves board turn'))
          (remove (fn [move]
                    (let [board' (moves/apply-backward move board)]
-                     (attacks? board' turn' king-square))))
+                     (or (attacks? board' turn' king-square)
+                         (not (KR-positions-consistent-with-castling? board' castling))))))
          (filter-by-unpromote-piece-set-legality (piece-set board turn'))
          (filter-by-uncapture-piece-set-legality (piece-set board turn)))))
 
 (defn make-unmove
   [{:keys [board turn half-move] :as pos} move]
-  (-> pos
-      (update-in [:board] #(moves/apply-backward move %))
-      (assoc :en-passant (moves/backwards-en-passant-square move)
-             :turn (other-color turn)
-             :half-move 0 ; TODO; but how?
-             )
-      ;; (update-in [:castling] moves/update-castling move)
-      (cond-> (= turn :white)
-              (update-in [:full-move] dec))))
+  (let [other-turn (other-color turn)]
+    (-> pos
+        (update-in [:board] #(moves/apply-backward move %))
+        (assoc :en-passant (moves/backwards-en-passant-square move)
+               :turn other-turn
+               :half-move 0 ; TODO; but how?
+               )
+        ;; (update-in [:castling] moves/update-castling move)
+        (cond-> (= turn :white)
+          (update-in [:full-move] dec)
+
+          (moves/castling? move)
+          (assoc-in [:castling
+                     other-turn
+                     (case (sq/col (:rook-from-sq move)) 0 :queen 7 :king)]
+                    true)))))

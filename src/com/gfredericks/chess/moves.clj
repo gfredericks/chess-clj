@@ -221,6 +221,7 @@
           (update-castling' to)))))
 
 (defn capturing? [move] (instance? IAttacking move))
+(defn castling? [move] (instance? CastlingMove move))
 
 (defn attacking-square
   [move]
