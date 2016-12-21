@@ -300,13 +300,13 @@
 
 (defspec forwards-backwards-roundtrip 100
   (prop/for-all [[pos mv] gen-position-with-move]
-                (some #{mv}
-                      (unmoves (make-move pos mv)))))
+    (some #{mv}
+          (unmoves (make-move pos mv)))))
 
 (defspec backwards-forwards-roundtrip 100
   (prop/for-all [[pos mv] gen-position-with-unmove]
-                (some #{mv}
-                      (moves (make-unmove pos mv)))))
+    (some #{mv}
+          (moves (make-unmove pos mv)))))
 
 (defn roundtrips?
   [pos]
