@@ -12,10 +12,31 @@
        (every? (fn [m] (and (= #{:king :queen} (set (keys m)))
                             (every? boolean? (vals m))))
                (vals m))))
+(defn partial-castling-flags?
+  [m]
+  (and (= #{:white :black} (set (keys m)))
+       (every? (fn [m] (and (= #{:king :queen} (set (keys m)))
+                            (every? #(contains? #{true false :unknown} %) (vals m))))
+               (vals m))))
 (s/def ::castling castling-flags?)
 (s/def ::en-passant (s/nilable ::sq/square))
 (s/def ::half-move integer?)
 (s/def ::full-move integer?)
+
+(s/def ::partial-position
+  (s/keys :req-un [::board/board ::turn
+                   :com.gfredericks.chess.position.partial/castling
+                   :com.gfredericks.chess.position.partial/en-passant
+                   :com.gfredericks.chess.position.partial/half-move
+                   :com.gfredericks.chess.position.partial/full-move]))
+
+(s/def :com.gfredericks.chess.position.partial/castling partial-castling-flags?)
+(s/def :com.gfredericks.chess.position.partial/en-passant
+  (s/or :unknown #{:unknown} :known ::en-passant))
+(s/def :com.gfredericks.chess.position.partial/half-move
+  (s/or :unknown #{:unknown} :known ::half-move))
+(s/def :com.gfredericks.chess.position.partial/full-move
+  (s/or :unknown #{:unknown} :known ::full-move))
 
 (defn- vecs
   [coll]
@@ -95,3 +116,13 @@
           (if en-passant (str ", en passant: " en-passant) ""))
   (println "half-move:" half-move)
   (println (apply str (repeat 40 "="))))
+
+(defn partial-position
+  [board move]
+  {:board board
+   :move move
+   :castling {:white {:king :unknown :queen :unknown}
+              :black {:king :unknown :queen :unknown}}
+   :en-passant :unknown
+   :half-move :unknown
+   :full-move :unknown})

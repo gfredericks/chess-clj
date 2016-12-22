@@ -722,6 +722,10 @@
          (filter-by-unpromote-piece-set-legality (piece-set board turn'))
          (filter-by-uncapture-piece-set-legality (piece-set board turn)))))
 
+(s/fdef make-unmove
+        :args (s/cat :pos ::position/partial-position
+                     :move moves/move?)
+        :ret ::position/partial-position)
 (defn make-unmove
   [{:keys [board turn half-move] :as pos} move]
   (let [other-turn (other-color turn)]
