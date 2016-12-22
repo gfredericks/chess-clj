@@ -28,11 +28,29 @@
   ;; competition to figure out the best weights :)
   (+ (pieces-out-of-position board)))
 
-(defn search
-  [partial-position]
+
+#_
+(defn search*
+  [partial-position stack]
   (let [c (cost partial-position)]
     (if (zero? c)
       [{:position partial-position
         :cost 0
-        :moves ()}]))
+        :moves ()}]
+      (let [move-tuples
+            (->> (rules/unmoves partial-position)
+                 (map (fn [idx move]
+                        (let [pos' (rules/make-unmove
+                                    partial-position
+                                    move)]
+                          [(cost pos') idx move pos']))
+                      (range))
+                 (sort))]
+        (if (empty? move-tuples)
+          )
+        )
+      ))
   )
+
+;; let's try recursive first?
+(defn search)
