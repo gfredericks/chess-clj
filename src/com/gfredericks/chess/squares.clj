@@ -1,7 +1,7 @@
 (ns com.gfredericks.chess.squares
   "Code for handling the 64 squares on the board. Defines a public var
   for each square in algebraic notation (a1 -> h8)"
-  (:require [clojure.spec :as s]))
+  (:require [clojure.spec.alpha :as s]))
 
 (s/def ::square (s/and integer? #(<= 0 % 63)))
 

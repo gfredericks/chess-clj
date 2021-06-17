@@ -1,6 +1,6 @@
 (ns com.gfredericks.chess.rules
   "Which moves are legal and such."
-  (:require [clojure.spec :as s]
+  (:require [clojure.spec.alpha :as s]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]

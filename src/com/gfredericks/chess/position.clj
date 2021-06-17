@@ -1,5 +1,5 @@
 (ns com.gfredericks.chess.position
-  (:require [clojure.spec :as s]
+  (:require [clojure.spec.alpha :as s]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.squares :as sq]))
 

@@ -220,7 +220,7 @@
         (let [pos'' (make-move-like pos' move-2)]
           (is (= :_ (board/get (:board pos'') a4))))))))
 
-(defn rand-nth'
+(defn rand-nth' ;; dead code?
   [^java.util.Random r coll]
   (nth coll
        (.nextInt r (count coll))))
