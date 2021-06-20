@@ -1,6 +1,7 @@
 (ns com.gfredericks.chess.proof-games
   (:refer-clojure :exclude [shuffle rand rand-int])
-  (:require [com.gfredericks.chess.board :as board]
+  (:require [clojure.test.check.random :as random]
+            [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]
             [com.gfredericks.chess.position :as position]
@@ -57,98 +58,132 @@
   (let [c (cost partial-position)]
     (condp == c
       0.0
-      {:state :done
-       :moves []}
+      [{:state :done
+        :moves []}]
 
       ##Inf
-      {:state :unreachable}
+      [{:state :unreachable}]
 
       ;; gotta use cond-> because assoc doesn't work for one arg
-      (cond-> {:state     :running-greedy
-               :rng       (java.util.SplittableRandom. 42)
-               :steps     0
-               :stack     []
-               :position  partial-position
-               :cost      (cost partial-position)
-               ;; is there a reasonable default here? how many moves do
-               ;; we suspect the farthest-to-reach position is?
-               :max-moves 200}
-        (seq kvs)
-        (as-> m (apply assoc m kvs))))))
+      [(cond-> {:state    :hill-climb-start
+                :rng      (random/make-random 42)
+                :position partial-position
+                :cost     c}
+         (seq kvs)
+         (as-> m (apply assoc m kvs)))])))
 
-(defn jusr->jur
-  [^java.util.SplittableRandom jusr]
-  (proxy [java.util.Random] [0]
-    (next [bits]
-      (assert (< bits 32))
-      (bit-and 0x7FFFFFF (.nextInt jusr)))))
+(defn rand->jur
+  [rand]
+  (java.util.Random. (random/rand-long rand))
+  #_ ;; dumber version that's probably not worth it
+  (let [ints (->> (iterate #(random/split (second %))
+                           [nil rand])
+                  (rest)
+                  (map (comp random/rand-long first))
+                  (mapcat (fn [^long x]
+                            [(bit-and 0x7FFFFFF x)
+                             (bit-and 0x7FFFFFF (bit-shift-right x 32))]))
+                  (cons nil) ;; see swap mechanics below
+                  (atom))]
+    (proxy [java.util.Random] [0]
+      (next [bits]
+        (assert (< bits 32))
+        (first (swap! ints next))))))
 
 (defn shuffle
-  [jusr xs]
+  [rand xs]
   (let [al (java.util.ArrayList. ^java.util.Collection xs)]
-    (java.util.Collections/shuffle al (jusr->jur jusr))
+    (java.util.Collections/shuffle al (rand->jur rand))
     (seq al)))
 
 ;; ideas
 ;; - use hyperloglog to estimate how many unique positions we've seen
 ;;   (as an alternative to keeping lots of state around to track it)
 (defn search-step
-  [{:keys [state position stack] :as search}]
-  (case state
-    :running-greedy
-    (let [tuples (->> (rules/unmoves position)
-                      (map (fn [unmove]
-                             (let [p (rules/make-unmove position unmove)]
-                               [unmove p (cost p)])))
-                      (remove #(= ##Inf (last %)))
-                      ;; TODO: prollably more efficient to just stick a random
-                      ;; element in the tuple and do a single sort
-                      ;;
-                      ;; could even experiment with a lazy sort at
-                      ;; some point, where we do a single pass picking
-                      ;; out all the best values and then lazily sort
-                      ;; the tail the same way or different; but maybe
-                      ;; that's dumb I bet this stuff is dwarfed by
-                      ;; the other logic we'll be doing
-                      (shuffle (:rng search))
-                      (sort-by last))]
-      (if (or (empty? tuples)
-              ;; these two cases will presumably be separated in the future
-              (< (:cost search) (last (first tuples))))
-        ;; nowhere to go from here, pop the stack
-        (if (empty? stack)
-          (assoc search :state :gave-up)
-          (assoc search :state :stack-pop))
-        (let [[[unmove position-2 cost] & more-tuples] tuples]
-          (if (zero? cost)
-            {:state :done
-             :moves (concat (map :unmove-taken stack) [unmove])}
-            ;; descend!
-            ;; TODO: check max-moves
-            (-> search
-                (update :stack conj
-                        {:starting-position position
-                         :unmove-taken unmove
-                         :unmove-idx 0
-                         :tuples tuples})
-                (update :steps inc)
-                (assoc :position position-2 :cost cost))))))
-    :stack-pop
-    (if (empty? stack)
-      (assoc search :state :gave-up)
-      (let [{:keys [starting-position unmove-idx tuples]} (peek stack)
-            unmove-idx (inc unmove-idx)]
-        ;; would this kind of situation be easier if we modeled the entire
-        ;; search object as a stack, instead of having various top-level
-        ;; attributes?
-        (if ())))))
+  [stack]
+  (let [top (peek stack)]
+    (case (:state top)
+      :hill-climb-start
+      (let [position (:position top)
+            [r1 r2] (random/split (:rng top))
+            unmoves (rules/unmoves position)
+            tuples (->> unmoves
+                        (map (fn [r unmove]
+                               (let [p (rules/make-unmove position unmove)]
+                                 [(cost p) (random/rand-long r) unmove p]))
+                             (random/split-n r1 (count unmoves)))
+                        (remove #(<= (:cost top) (first %)))
+                        (sort)
+                        (map (fn [[cost _ unmove p]] [cost unmove p])))]
+        (-> stack
+            pop
+            (conj (assoc top :state :hill-climb-running :move-tuples tuples :rng r2))))
+      :hill-climb-running
+      (let [tuples (:move-tuples top)]
+        (if (empty? tuples)
+          (let [stack' (pop stack)]
+            (if (empty? stack')
+              [{:state :gave-up}]
+              stack'))
+          (let [[cost unmove p] (first tuples)
+                [r1 r2] (random/split (:rng top))]
+            ;; we could avoid checking this for each move (since
+            ;; they're already sorted) by being more clever, but
+            ;; probably not worth it
+            (if (zero? cost)
+              [{:state :done :moves (cons unmove (reverse (keep :move stack)))}]
+              (-> stack
+                  pop
+                  (conj (-> top (update :tuples next) (assoc :rng r1))
+                        {:state :hill-climb-start
+                         :move unmove
+                         :position p
+                         :rng r2
+                         :cost cost})))))))))
+
+;; ANOTHER IDEA
+;; - is there something better than a proper tree search?
+;; - I dunno; I do think we need to keep it "async", i.e. modeling
+;;   the search stack explicitly, because that will be necessary
+;;   for js animation anyhow
+;;   - it feels like it'd be useful to be able to express subgoals
+;;     and find out about the results of those goals and react to
+;;     them, just like you call a function and get the return value
+;;     and decide where to go next; but modeling that with pure data
+;;     seems pretty tedious
+;;     - can I build a let macro that does this? seems crazy, but...
+;;     - I think I'm confused about whether the basic unit of computation
+;;       here acts on a whole stack or just the top of the stack, which
+;;       is a state in a certain sense
+;;       - would it be weird to attach the "return" value from a subsearch
+;;         as a key on a frame?
+;;         - does this suggest an easy way to implement a let macro?
+;;         - so suppose we try to implement a framework where the basic
+;;           primitive is functions on the current state, which is at the
+;;           top of the stack; what would the semantics be?
+;;           - [:push new-frame], [:return value], and [:replace new-frame]?
+;;             - is that too many? is push and return simpler?
+;;           - um; can we implement clojure's special forms? erhm
+;; - what about producing lazy seqs of states, instead of having a stack;
+;;   is that crazy? it might make the async stuff easier, arguably; it makes
+;;   aborting a calculation from above easier. does it make getting return
+;;   values easier?
+;;   - it *does* mean that the state of the computation will be implicit in
+;;     the runtime's call stack. Which is maybe fine?
+;;   - it might be prone to absurd stack-thrashing though
 
 (defn run-search
   [search max-steps]
-  (if (or (zero? max-steps)
-          (#{:gave-up :unreachable :done} (:state search)))
-    search
-    (recur (search-step search) (dec max-steps))))
+  (loop [search search
+         total-steps 0]
+    (cond (= max-steps total-steps)
+          {:result :max-steps :search search :steps total-steps}
+
+          (#{:gave-up :unreachable :done} (:state (peek search)))
+          {:result (:state (peek search)) :data (peek search) :steps total-steps}
+
+          :else
+          (recur (search-step search) (inc total-steps)))))
 
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
