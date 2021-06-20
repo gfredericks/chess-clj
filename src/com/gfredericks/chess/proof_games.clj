@@ -1,5 +1,4 @@
 (ns com.gfredericks.chess.proof-games
-  (:refer-clojure :exclude [shuffle rand rand-int])
   (:require [clojure.test.check.random :as random]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.moves :as moves]
@@ -7,12 +6,6 @@
             [com.gfredericks.chess.position :as position]
             [com.gfredericks.chess.squares :as sq]
             [com.gfredericks.chess.rules :as rules]))
-
-;;
-;; Do we really want A* or just something similar?  Cuz we're not
-;; going for the shortest route in particular...there's lots of local
-;; minima we need to avoid. And phrasing it as distance might be hard.
-;;
 
 (def initial-board (:board position/initial))
 
@@ -28,30 +21,6 @@
   ;; hey we could attach weights to these and run some kind of
   ;; competition to figure out the best weights :)
   (+ (pieces-out-of-position board)))
-
-
-#_
-(defn search*
-  [partial-position stack]
-  (let [c (cost partial-position)]
-    (if (zero? c)
-      [{:position partial-position
-        :cost 0
-        :moves ()}]
-      (let [move-tuples
-            (->> (rules/unmoves partial-position)
-                 (map (fn [idx move]
-                        (let [pos' (rules/make-unmove
-                                    partial-position
-                                    move)]
-                          [(cost pos') idx move pos']))
-                      (range))
-                 (sort))]
-        (if (empty? move-tuples)
-          )
-        )
-      ))
-  )
 
 (defn create-search
   [partial-position & kvs]
@@ -71,30 +40,6 @@
                 :cost     c}
          (seq kvs)
          (as-> m (apply assoc m kvs)))])))
-
-(defn rand->jur
-  [rand]
-  (java.util.Random. (random/rand-long rand))
-  #_ ;; dumber version that's probably not worth it
-  (let [ints (->> (iterate #(random/split (second %))
-                           [nil rand])
-                  (rest)
-                  (map (comp random/rand-long first))
-                  (mapcat (fn [^long x]
-                            [(bit-and 0x7FFFFFF x)
-                             (bit-and 0x7FFFFFF (bit-shift-right x 32))]))
-                  (cons nil) ;; see swap mechanics below
-                  (atom))]
-    (proxy [java.util.Random] [0]
-      (next [bits]
-        (assert (< bits 32))
-        (first (swap! ints next))))))
-
-(defn shuffle
-  [rand xs]
-  (let [al (java.util.ArrayList. ^java.util.Collection xs)]
-    (java.util.Collections/shuffle al (rand->jur rand))
-    (seq al)))
 
 ;; ideas
 ;; - use hyperloglog to estimate how many unique positions we've seen
