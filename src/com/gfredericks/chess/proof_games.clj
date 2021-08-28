@@ -16,11 +16,81 @@
                  (= piece (board/get board sq))))
        (count)))
 
+(defn back-row-pieces-locked-out
+  [board]
+  ;; TODO:
+  ;; - you can lock a rook out if all your pawns are in the
+  ;;   correct columns and on the second or third rows
+  (if (or
+       ;; white bishop locked out by two pawns
+       (and (= :P
+               (board/get board #chess/square b2)
+               (board/get board #chess/square d2))
+            (not= :B (board/get board #chess/square c1)))
+       (and (= :P
+               (board/get board #chess/square e2)
+               (board/get board #chess/square g2))
+            (not= :B (board/get board #chess/square f1)))
+       ;; black bishop locked out by two pawns
+       (and (= :p
+               (board/get board #chess/square b7)
+               (board/get board #chess/square d7))
+            (not= :b (board/get board #chess/square c8)))
+       (and (= :p
+               (board/get board #chess/square e7)
+               (board/get board #chess/square g7))
+            (not= :b (board/get board #chess/square f8)))
+       ;; white pawns are all in place
+       (and (apply = :P (for [col (range 8)]
+                          (board/get board (sq/square col 1))))
+            (or
+             ;; assuming the bishop is in place, the rook is allowed
+             ;; to be on the knight's square or its own square
+             (not-any? #{:R}
+                       [(board/get board #chess/square a1)
+                        (board/get board #chess/square b1)])
+             (not-any? #{:R}
+                       [(board/get board #chess/square g1)
+                        (board/get board #chess/square h1)])
+             (not= :Q (board/get board #chess/square d1))
+             (not= :K (board/get board #chess/square e1))))
+       ;; black pawns are all in place
+       (and (apply = :p (for [col (range 8)]
+                          (board/get board (sq/square col 6))))
+            (or (not-any? #{:r}
+                          [(board/get board #chess/square a8)
+                           (board/get board #chess/square b8)])
+                (not-any? #{:r}
+                          [(board/get board #chess/square g8)
+                           (board/get board #chess/square h8)])
+                (not= :q (board/get board #chess/square d8))
+                (not= :k (board/get board #chess/square e8)))))
+    ##Inf
+    0.0))
+
+(let [full (->> (board/piece-placements (:board position/initial))
+                (map second)
+                (frequencies))]
+  (defn pieces-missing
+    [board]
+    (let [counts (->> (board/piece-placements board)
+                      (map second)
+                      (frequencies))]
+      (->> full
+           (map (fn [[piece c]]
+                  (let [actual (get counts piece 0)]
+                    (max 0 (- c actual)))))
+           (reduce +)))))
+
 (defn cost
   [{:keys [board]}]
   ;; hey we could attach weights to these and run some kind of
   ;; competition to figure out the best weights :)
-  (+ (pieces-out-of-position board)))
+
+  ;; TODO: we could short-circuit as soon as any of these is ##Inf
+  (+ (pieces-out-of-position board)
+     (pieces-missing board)
+     (back-row-pieces-locked-out board)))
 
 (defn create-search
   [partial-position & kvs]
@@ -41,28 +111,44 @@
          (seq kvs)
          (as-> m (apply assoc m kvs)))])))
 
+(defn max-cost-from-stack
+  [stack]
+  ;; just a heuristic I'm making up for now
+  (let [x (count stack)]
+    (if (< x 3)
+      ##Inf
+      (->> (subvec stack 0 (- x 3))
+           (keep :cost)
+           (apply min ##Inf)))))
+
 ;; ideas
 ;; - use hyperloglog to estimate how many unique positions we've seen
 ;;   (as an alternative to keeping lots of state around to track it)
 (defn search-step
   [stack]
   (let [top (peek stack)]
+    #_
+    (printf "SEARCH STEP[%s][%d]\n"
+            (mapv :state stack)
+            (count stack))
     (case (:state top)
       :hill-climb-start
       (let [position (:position top)
             [r1 r2] (random/split (:rng top))
             unmoves (rules/unmoves position)
+            max-cost-exclusive (max-cost-from-stack stack)
             tuples (->> unmoves
                         (map (fn [r unmove]
                                (let [p (rules/make-unmove position unmove)]
                                  [(cost p) (random/rand-long r) unmove p]))
                              (random/split-n r1 (count unmoves)))
-                        (remove #(<= (:cost top) (first %)))
+                        (remove #(<= max-cost-exclusive (first %)))
                         (sort)
                         (map (fn [[cost _ unmove p]] [cost unmove p])))]
         (-> stack
             pop
             (conj (assoc top :state :hill-climb-running :move-tuples tuples :rng r2))))
+
       :hill-climb-running
       (let [tuples (:move-tuples top)]
         (if (empty? tuples)
@@ -72,6 +158,9 @@
               stack'))
           (let [[cost unmove p] (first tuples)
                 [r1 r2] (random/split (:rng top))]
+            #_
+            (printf "TRYING %s (cost=%s) from cost=%s, stacksize=%s\n"
+                    (print-str unmove) cost (:cost (peek stack)) (count stack))
             ;; we could avoid checking this for each move (since
             ;; they're already sorted) by being more clever, but
             ;; probably not worth it
@@ -79,7 +168,7 @@
               [{:state :done :moves (cons unmove (reverse (keep :move stack)))}]
               (-> stack
                   pop
-                  (conj (-> top (update :tuples next) (assoc :rng r1))
+                  (conj (-> top (update :move-tuples next) (assoc :rng r1))
                         {:state :hill-climb-start
                          :move unmove
                          :position p

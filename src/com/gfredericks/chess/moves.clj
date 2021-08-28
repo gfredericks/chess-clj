@@ -1,8 +1,11 @@
 (ns com.gfredericks.chess.moves
-  (:require [clojure.spec.alpha :as s]
-            [com.gfredericks.chess.board :as b]
-            [com.gfredericks.chess.pieces :as pieces]
-            [com.gfredericks.chess.squares :as sq]))
+  (:require
+   [clojure.spec.alpha :as s]
+   [com.gfredericks.chess.board :as b]
+   [com.gfredericks.chess.pieces :as pieces]
+   [com.gfredericks.chess.squares :as sq])
+  (:import
+   (java.io Writer)))
 
 (defprotocol IMove
   (apply-forward [move board])
@@ -13,6 +16,9 @@
     "Returns the square the piece being moved is moving from.")
   (primary-to [move]
     "Returns the square the piece being moved is moving to."))
+
+(definterface IPrintableMove
+  (printMove [^java.io.Writer print-writer]))
 
 (def move? #(satisfies? IMove %))
 
@@ -41,7 +47,13 @@
     (move-piece board to-sq from-sq))
   (progressive? [_] false)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IPrintableMove
+  (printMove [this ^Writer print-writer]
+    (.write print-writer (format "#%s{:from-sq #chess/square \"%s\", :to-sq #chess/square \"%s\"}"
+                                 (.getName (class this))
+                                 (sq/format-square from-sq)
+                                 (sq/format-square to-sq)))))
 
 (defrecord BasicCaptureMove [from-sq to-sq captured-piece]
   IMove
@@ -66,7 +78,13 @@
     (move-piece board to-sq from-sq))
   (progressive? [_] true)
   (primary-from [_] from-sq)
-  (primary-to [_] to-sq))
+  (primary-to [_] to-sq)
+  IPrintableMove
+  (printMove [this ^Writer print-writer]
+    (.write print-writer (format "#%s{:from-sq #chess/square \"%s\", :to-sq #chess/square \"%s\"}"
+                                 (.getName (class this))
+                                 (sq/format-square from-sq)
+                                 (sq/format-square to-sq)))))
 
 (defrecord PawnCaptureMove [from-sq to-sq captured-piece]
   IMove
@@ -244,3 +262,9 @@
   [move]
   (when (promoting-move? move)
     (-promoted-to move)))
+
+(defmethod print-method IPrintableMove
+  [^IPrintableMove x pw]
+  (.printMove x pw))
+
+(prefer-method print-method IPrintableMove clojure.lang.IRecord)
