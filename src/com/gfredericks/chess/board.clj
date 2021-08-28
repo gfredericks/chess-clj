@@ -100,7 +100,36 @@
                                (recur (str s (name e)) more))
                              s)))))
 
-(defn print-board
+(defn print-board-unicode
+  [board]
+  (print "  ┏")
+  (dotimes [_ 7]
+    (print "━━━┯"))
+  (println "━━━┓")
+  (doseq [row (range 7 -1 -1)]
+    (print (inc row) \┃)
+    (doseq [col (range 8)
+            :let [piece (get board (sq/square col row))
+                  piece-str (if (= :_ piece) \space
+                                (case piece
+                                  :K "♔" :Q "♕" :R "♖"
+                                  :B "♗" :N "♘" :P "♙"
+                                  :k "♚" :q "♛" :r "♜"
+                                  :b "♝" :n "♞" :p "♟︎"))]]
+      (print (str \space piece-str \space (if (= 7 col) \┃ \│))))
+    (print \newline)
+    (when (pos? row)
+      (print "  ┠")
+      (dotimes [_ 7]
+        (print "───┼"))
+      (println "───┨")))
+  (print "  ┗")
+  (dotimes [_ 7]
+    (print "━━━┷"))
+  (println "━━━┛")
+  (println "   " (apply str (for [x "abcdefgh"] (str x "   ")))))
+
+(defn print-board-ascii
   [board]
   (println " " (apply str (repeat 33 \-)))
   (doseq [row (range 7 -1 -1)]
@@ -115,6 +144,8 @@
       (println \+)))
   (println (apply str "  " (repeat 33 \-)))
   (println "   " (apply str (for [x "abcdefgh"] (str x "   ")))))
+
+(def print-board print-board-unicode)
 
 (defn piece-placements
   "Returns a sequence of tuples: [sq piece]."
