@@ -267,4 +267,13 @@
   [^IPrintableMove x pw]
   (.printMove x pw))
 
+(defn format-humanely
+  [move]
+  (format "%s%s%s"
+          (sq/format-square (primary-from move))
+          (if (capturing? move) "x" "-")
+          (sq/format-square (primary-to move))))
+
 (prefer-method print-method IPrintableMove clojure.lang.IRecord)
+(prefer-method print-method IPrintableMove java.util.Map)
+(prefer-method print-method IPrintableMove clojure.lang.IPersistentMap)

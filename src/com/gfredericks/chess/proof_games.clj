@@ -1,4 +1,5 @@
 (ns com.gfredericks.chess.proof-games
+  (:refer-clojure :exclude [rand-nth])
   (:require [clojure.test.check.random :as random]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.moves :as moves]
@@ -8,6 +9,25 @@
             [com.gfredericks.chess.rules :as rules]))
 
 (def initial-board (:board position/initial))
+
+(defn rand-nth
+  "immutable version of clojure.core/rand-nth"
+  [rng coll]
+  (let [count (count coll)]
+    (let [idx (mod (random/rand-long rng) count)]
+      (nth coll idx))))
+
+(defn exponential-rand-nth
+  [rng prob-of-next coll]
+  (if (empty? coll)
+    (throw (ex-info "exponential-rand-nth on empty coll" {:coll coll}))
+    (loop [x (first coll) xs (next coll) rng rng]
+      (if xs
+        (let [[r1 r2] (random/split rng)]
+          (if (< (random/rand-double r1) prob-of-next)
+            (recur (first xs) (next xs) r2)
+            x))
+        x))))
 
 (defn pieces-out-of-position
   [board]
@@ -82,7 +102,24 @@
                     (max 0 (- c actual)))))
            (reduce +)))))
 
-(defn cost
+(defn distances-from-home
+  [board]
+  ;; how clever do we have to be to efficiently implement this?
+  ;; (i.e., to implement it incrementally)
+  ;; - it describes for each piece and each square
+  ;;   - how many moves it would take the piece to
+  ;;     reach that square if nothing else was moving
+  ;;   - in the case of pawns, how many column shifts (captures)
+  ;;     are required (maybe this could be a totally separate thing??)
+  ;;   - whether the target square is occupied by some other piece
+  ;; - really it needs to keep track of all the relationships between
+  ;;   all pairs of squares or something, in order to properly do it
+  ;;   incrementally, right?
+  ;;   - it should be easy to test.check this to make sure the
+  ;;     incrementality is correct
+  )
+
+(defn position-cost
   [{:keys [board]}]
   ;; hey we could attach weights to these and run some kind of
   ;; competition to figure out the best weights :)
@@ -94,7 +131,7 @@
 
 (defn create-search
   [partial-position & kvs]
-  (let [c (cost partial-position)]
+  (let [c (position-cost partial-position)]
     (condp == c
       0.0
       [{:state :done
@@ -140,7 +177,7 @@
             tuples (->> unmoves
                         (map (fn [r unmove]
                                (let [p (rules/make-unmove position unmove)]
-                                 [(cost p) (random/rand-long r) unmove p]))
+                                 [(position-cost p) (random/rand-long r) unmove p]))
                              (random/split-n r1 (count unmoves)))
                         (remove #(<= max-cost-exclusive (first %)))
                         (sort)
@@ -218,6 +255,119 @@
 
           :else
           (recur (search-step search) (inc total-steps)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; try something totally different!
+
+(defn create-search
+  [position]
+  { ;; budget is the number of not-improving steps we allow; the budget
+   ;; will gradually increase as the search faces difficulties
+   ;; (when though? only from the root node? if we're searching a very
+   ;; long game it feels like it'd be silly to end up backing up to the
+   ;; beginning...; maybe we'll have to formalize "phases" at some point)
+   :state         :searching
+   :search-budget 1
+   :rng           (random/make-random 42)
+   ;; represents probability of backing up an additional step after
+   ;; hitting a wall; gets increased somehow
+   :frustration   0.01
+   :stack         (let [the-cost (position-cost position)]
+                    [{:position position
+                      :cost the-cost
+                      :improvements [the-cost]
+                      :budget-used 0}])})
+
+(defn search-step
+  [{:keys [search-budget stack rng frustration] :as search}]
+  ;; when do we decide to unravel (only when no moves available?) and
+  ;; how far do we unravel in that case? should we have a frustration
+  ;; parameter that's gradually increasing and influences how far up
+  ;; we go? could start with that I guess...and when we go up to the
+  ;; top, that's when we increase the budget
+  (let [{:keys [position cost budget-used improvements]} (peek stack)
+        budget-available (- search-budget budget-used)
+        unmoves (->> (rules/unmoves position)
+                     (map (fn [unmove]
+                            (let [pos-2 (rules/make-unmove position unmove)]
+                              ;; TODO: the (pr-str unmove) here is probably
+                              ;; bad for perf; what's the fastest way to get
+                              ;; a deterministic ordering? I don't enjoy the
+                              ;; idea of messing with the defrecords in the
+                              ;; moves ns to get them to be Comparable but
+                              ;; maybe that's the best?
+                              [(position-cost pos-2) (pr-str unmove) unmove pos-2])))
+                     (sort)
+                     (map (fn [[a _ b c]] [a b c])))
+        last-improvement (peek improvements)
+        unmoves (cond->> unmoves
+                  ;; if no budget available, then only look at the good moves
+                  (not (pos? budget-available))
+                  (take-while (fn [[cost' pos']] (< cost' last-improvement))))]
+    (if (empty? unmoves)
+      (if (empty? (pop stack))
+        ;; crap I think we're done then
+        {:state :impossible}
+
+        (let [[r1 r2] (random/split rng)
+              popped-stack (->> (iterate pop stack)
+                                (next) ;; have to pop at least one frame
+                                (take-while seq) ;; don't pop all the way to empty
+                                (exponential-rand-nth r1 frustration))]
+          (if (next popped-stack)
+            ;; we're not all the way back to the beginning
+            (-> search
+                (assoc :rng r2 :stack popped-stack)
+                (update :frustration (let [inv #(- 1 %)]
+                                       #(-> % inv (* 0.9) inv))))
+            ;; we ARE all the way back to the beginning! geez what a
+            ;; tough search
+            (-> search
+                (assoc :rng r2 :frustration 0.01 :stack popped-stack)
+                (update :search-budget inc)))))
+      (if (zero? (ffirst unmoves))
+        ;; hooray we're done!
+        {:state :done
+         :moves (->> (conj stack {:unmove (second (first unmoves))})
+                     (rest)
+                     (map :unmove))}
+        (let [[r1 r2 r3 r4] (random/split-n rng 4)
+              chosen (->> unmoves
+                          (partition-by first)
+                          (exponential-rand-nth r1 0.6666666667)
+                          (rand-nth r2))
+              [chosen-cost chosen-unmove pos-2] chosen
+              improvement? (< chosen-cost (peek improvements))]
+          (-> search
+              (assoc :rng r4)
+              (update :stack conj
+                      {:position pos-2
+                       :cost chosen-cost
+                       :budget-used (if improvement? budget-used (inc budget-used))
+                       :unmove chosen-unmove
+                       :improvements (cond-> improvements
+                                       improvement? (conj chosen-cost))})))))))
+
+(defn run-search
+  ([search max-steps]
+   (run-search search max-steps {}))
+  ([search max-steps {:keys [print?] :or {print? false}}]
+   (loop [{:keys [state] :as search} search
+          total-steps 0]
+     (cond (#{:done :impossible} state)
+           {:result state :data search :total-steps total-steps}
+
+           (= max-steps total-steps)
+           {:result :max-steps :search search :steps total-steps}
+
+           :else
+           (do
+             (when print?
+               (if-let [p (-> search :stack peek :position)]
+                 (position/print-position p)
+                 (throw (ex-info "bad search????" {:search search}))))
+             (recur (search-step search) (inc total-steps)))))))
 
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

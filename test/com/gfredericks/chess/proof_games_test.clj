@@ -7,6 +7,7 @@
             [com.gfredericks.chess.proof-games :as proof-games]
             [com.gfredericks.chess.board :as board]
             [com.gfredericks.chess.position :as position]
+            [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.rules :as rules]
             [com.gfredericks.chess.rules-test :as rules-test]))
 
@@ -60,4 +61,31 @@
                #chess/fen "rnbqkbnr/pp1ppppp/8/2p5/2N5/8/PPPPPPPP/R1BQKBNR b KQkq - 1 2"
                #chess/fen "rnbqkbnr/2pppppp/p7/1p6/Q4P2/2P5/PP1PP1PP/RNB1KBNR b KQkq - 1 3"]
           :let [result (very-short-games-test pos)]]
-    (is (results/pass? result))))
+    (is (results/pass? result)
+        (str "Can't solve " pos))))
+
+(defn step-through-search
+  [pos]
+  (loop [{:keys [stack] :as search} (proof-games/create-search pos)
+         steps 0]
+    (->> (:stack search)
+         (rest)
+         (run! (fn [{:keys [budget-used cost unmove]}]
+                 (printf "%02d %.3f %s\n" budget-used cost
+                         (moves/format-humanely unmove)))))
+    (prn (assoc (select-keys search [:search-budget :frustration])
+                :steps steps))
+    (position/print-position (:position (peek stack)))
+    (.read System/in)
+    (recur (proof-games/search-step search) (inc steps))))
+
+(defn -main
+  []
+  (step-through-search
+   #chess/fen "rnbqkbnr/2pppppp/p7/1p6/Q4P2/2P5/PP1PP1PP/RNB1KBNR b KQkq - 1 3")
+  #_
+  (Let [p #chess/fen "rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/1RBQKBNR w Kkq - 4 3"]
+    (time
+     (prn (proof-games/run-search (proof-games/create-search p)
+                                  2000
+                                  {:print? false #_true})))))
