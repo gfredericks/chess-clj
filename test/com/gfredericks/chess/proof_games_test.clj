@@ -38,30 +38,30 @@
 ;; cost function.  we could do something with precalculated distances
 ;; between pairs of squares, though that might run into the fungibility
 ;; problem...I dunno maybe not?
-(defn very-short-games-test
-  [pos1]
+(defn test-solvable-position
+  [pos1 max-steps max-moves]
   (let [{:keys [result data total-steps]}
-        (proof-games/run-search (proof-games/create-search pos1)
-                                ;; 100 should generally be enough, but
-                                ;; unfortunately the randomness in our
-                                ;; algorithm means there can be a lot
-                                ;; of variance; should we do something
-                                ;; to make the initial search more
-                                ;; deterministic/optimistic/greedy?
-
-                                ;; we could also rewrite this to try
-                                ;; different seeds I guess
-                                1000)
+        (proof-games/run-search (proof-games/create-search pos1) max-steps)
 
         moves-2 (:moves data)]
     (reify results/Result
       (pass? [_]
         (and (= :done result)
-             (< (count moves-2) 20)
+             (< (count moves-2) max-moves)
              (let [pos2 (reduce rules/make-move position/initial (reverse moves-2))]
                (= (:board pos1) (:board pos2)))))
       (result-data [_]
         {:position pos1}))))
+
+(defn very-short-games-test
+  [pos]
+  ;; 100 steps should generally be enough, but unfortunately the
+  ;; randomness in our algorithm means there can be a lot of variance;
+  ;; should we do something to make the initial search more
+  ;; deterministic/optimistic/greedy?
+
+  ;; we could also rewrite this to try different seeds I guess
+  (test-solvable-position pos 1000 20))
 
 (defspec very-short-games 100
   (prop/for-all [moves (gen/resize 5 rules-test/gen-game-prefix)]
