@@ -5,6 +5,7 @@
             [com.gfredericks.chess.moves :as moves]
             [com.gfredericks.chess.pieces :as pieces]
             [com.gfredericks.chess.position :as position]
+            [com.gfredericks.chess.proof-games.distances :as distances]
             [com.gfredericks.chess.squares :as sq]
             [com.gfredericks.chess.rules :as rules]))
 
@@ -35,6 +36,18 @@
        (remove (fn [[sq piece]]
                  (= piece (board/get board sq))))
        (count)))
+
+(let [initial (->> (board/piece-placements initial-board)
+                   (map second)
+                   (frequencies))]
+  (defn promoted-piece-count
+    [board]
+    (->> (board/piece-placements board)
+         (map second)
+         (frequencies)
+         (map (fn [[piece count]]
+                (max 0 (- count (get initial piece)))))
+         (reduce +))))
 
 (defn back-row-pieces-locked-out
   [board]
@@ -102,22 +115,74 @@
                     (max 0 (- c actual)))))
            (reduce +)))))
 
+(def home-squares
+  "Function from piece to a collection of squares."
+  (->> (board/piece-placements initial-board)
+       (group-by second)
+       (map (fn [[piece sq-piece-pairs]]
+              [piece (map first sq-piece-pairs)]))
+       (into {})))
+
 (defn distances-from-home
   [board]
-  ;; how clever do we have to be to efficiently implement this?
-  ;; (i.e., to implement it incrementally)
-  ;; - it describes for each piece and each square
-  ;;   - how many moves it would take the piece to
-  ;;     reach that square if nothing else was moving
-  ;;   - in the case of pawns, how many column shifts (captures)
-  ;;     are required (maybe this could be a totally separate thing??)
-  ;;   - whether the target square is occupied by some other piece
-  ;; - really it needs to keep track of all the relationships between
-  ;;   all pairs of squares or something, in order to properly do it
-  ;;   incrementally, right?
-  ;;   - it should be easy to test.check this to make sure the
-  ;;     incrementality is correct
-  )
+  (let [all-distances (distances/all-distances-2 board)]
+    (->> (board/piece-placements board)
+         (remove (fn [[sq piece]]
+                   (= :pawn (pieces/piece-type piece))))
+         (group-by (fn [[sq piece]]
+                     (let [t (pieces/piece-type piece)]
+                       [(pieces/piece-color piece)
+                        t
+                        (if (= :bishop t) (sq/square-color sq) nil)])))
+         ;; how do we account for piece multiplicity?  the
+         ;; Correct answer is, when there's just one of two
+         ;; pieces, try both spots and return the smaller one;
+         ;; when both pieces are on the board, try both
+         ;; combinations and return the smaller sum
+         ;;
+         ;; oh we also maybe need to account for promoted
+         ;; pieces! unless we enforce phases of the game where
+         ;; we don't even consider this stuff until the pieces
+         ;; are unpromoted, which I think we probably should;
+         ;; there's just too many other considerations
+         ;; otherwise
+         (map (fn [[[color type bishop-type] sq-piece-tuples]]
+                (let [piece (->> sq-piece-tuples first second)
+                      ;; step 1: determine which starting squares matter
+                      homes (cond->> (home-squares piece)
+                              (= :bishop type)
+                              (filter #(= bishop-type (sq/square-color %))))
+                      ;; step 2: evaluate all possible assignments of
+                      ;; pieces to home squares and return the minimum
+                      ;; sum-of-distances
+                      [sq-p-1 sq-p-2] sq-piece-tuples
+                      [home-1 home-2] homes
+                      ;; each assignment is a map from [sq piece] to home-square
+                      assignments (case [(count sq-piece-tuples) (count homes)]
+                                    [1 1]
+                                    [{sq-p-1 home-1}]
+                                    [1 2]
+                                    [{sq-p-1 home-1} {sq-p-1 home-2}]
+                                    [2 2]
+                                    [{sq-p-1 home-1, sq-p-2 home-2}
+                                     {sq-p-1 home-2, sq-p-2 home-1}]
+                                    ;; if we have promoted pieces we might get here;
+                                    ;; should arrange the algorithm so that doesn't
+                                    ;; happen
+                                    (throw (ex-info "Shouldn't be possible" {:board board
+                                                                             :sq-piece-tuples sq-piece-tuples
+                                                                             :homes homes})))]
+                  (->> assignments
+                       (map (fn [assignment]
+                              (->> assignment
+                                   (map (fn [[[square piece] home]]
+                                          (or (all-distances (pieces/piece-type piece)
+                                                             home
+                                                             square)
+                                              7)))
+                                   (reduce +))))
+                       (apply min)))))
+         (reduce +))))
 
 (defn position-cost
   [{:keys [board]}]
@@ -125,9 +190,16 @@
   ;; competition to figure out the best weights :)
 
   ;; TODO: we could short-circuit as soon as any of these is ##Inf
-  (+ (pieces-out-of-position board)
-     (pieces-missing board)
-     (back-row-pieces-locked-out board)))
+  (let [ppc (promoted-piece-count board)]
+    (if (pos? ppc)
+      ;; TODO: in the promoted piece phase we'll want a distances-from
+      ;; depromation-square or something like that; will be hard to
+      ;; privilege the more convenient columns...
+      (* ppc 1000)
+      (+ (pieces-out-of-position board)
+         (distances-from-home board)
+         (pieces-missing board)
+         (back-row-pieces-locked-out board)))))
 
 (defn create-search
   [partial-position & kvs]
@@ -261,23 +333,24 @@
 ;; try something totally different!
 
 (defn create-search
-  [position]
-  { ;; budget is the number of not-improving steps we allow; the budget
-   ;; will gradually increase as the search faces difficulties
-   ;; (when though? only from the root node? if we're searching a very
-   ;; long game it feels like it'd be silly to end up backing up to the
-   ;; beginning...; maybe we'll have to formalize "phases" at some point)
-   :state         :searching
-   :search-budget 1
-   :rng           (random/make-random 42)
-   ;; represents probability of backing up an additional step after
-   ;; hitting a wall; gets increased somehow
-   :frustration   0.01
-   :stack         (let [the-cost (position-cost position)]
-                    [{:position position
-                      :cost the-cost
-                      :improvements [the-cost]
-                      :budget-used 0}])})
+  ([position] (create-search position {}))
+  ([position {:keys [seed] :or {seed 42}}]
+   { ;; budget is the number of not-improving steps we allow; the budget
+    ;; will gradually increase as the search faces difficulties
+    ;; (when though? only from the root node? if we're searching a very
+    ;; long game it feels like it'd be silly to end up backing up to the
+    ;; beginning...; maybe we'll have to formalize "phases" at some point)
+    :state         :searching
+    :search-budget 1
+    :rng           (random/make-random seed)
+    ;; represents probability of backing up an additional step after
+    ;; hitting a wall; gets increased somehow
+    :frustration   0.01
+    :stack         (let [the-cost (position-cost position)]
+                     [{:position position
+                       :cost the-cost
+                       :improvements [the-cost]
+                       :budget-used 0}])}))
 
 (defn search-step
   [{:keys [search-budget stack rng frustration] :as search}]
