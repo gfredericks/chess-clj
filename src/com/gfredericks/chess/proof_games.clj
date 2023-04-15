@@ -37,16 +37,19 @@
                  (= piece (board/get board sq))))
        (count)))
 
-(let [initial (->> (board/piece-placements initial-board)
-                   (map second)
-                   (frequencies))]
+(let [piece-type-counts (fn [board]
+                          (->> (board/piece-placements board)
+                               (map (fn [[sq piece]]
+                                      (if (= :bishop (pieces/piece-type piece))
+                                        [piece (sq/square-color sq)]
+                                        piece)))
+                               (frequencies)))
+      initial (piece-type-counts initial-board)]
   (defn promoted-piece-count
     [board]
-    (->> (board/piece-placements board)
-         (map second)
-         (frequencies)
-         (map (fn [[piece count]]
-                (max 0 (- count (get initial piece)))))
+    (->> (piece-type-counts board)
+         (map (fn [[piece-spec count]]
+                (max 0 (- count (get initial piece-spec)))))
          (reduce +))))
 
 (defn back-row-pieces-locked-out
@@ -184,6 +187,95 @@
                        (apply min)))))
          (reduce +))))
 
+(defn pawn-behinds
+  "Given a piece-color and a square, returns all of the squares
+  behind that pawn back to its home square; e.g., for white f4,
+  return f3,f2."
+  [piece-color sq]
+  (let [col (sq/col sq)
+        behind-rows
+        (case piece-color
+          :white (range (sq/pawn-start-row :white) (sq/row sq))
+          :black (range (sq/pawn-start-row :black) (sq/row sq) -1))]
+    (map (fn [row] (sq/square col row)) behind-rows)))
+
+(defn sad-pawns
+  "Tries to incentivize healthy pawn structure"
+  [board]
+  ;; first try: count the pawns that have any pawns behind them
+  (let [all-pawns (->> (board/piece-placements board)
+                       (filter (fn [[sq piece]] (= :pawn (pieces/piece-type piece)))))
+        squares-with-pawns (->> all-pawns (map first) set)]
+    (->> all-pawns
+         (filter (fn [[sq piece]]
+                   (->> (pawn-behinds (pieces/piece-color piece) sq)
+                        (filter squares-with-pawns)
+                        (first))))
+         (count))))
+
+;; okay I think we need to switch this to some well-defined phases;
+;; 1) unpromote pieces (TODO)
+;;    - distance of promoted pieces from back rank
+;;      - possibly develop an opinion about the optimal
+;;        depromotation square
+;;    - pawn-sadness
+;;    - pieces on board -- don't incentivize uncapturing
+;;      until phase 3!
+;; 2) untangle white vs black (no black pieces behind white pieces)
+;;    - pieces on board
+;;    - pawn sadness
+;; 3) uncapture all non-pawns
+;; 4) move all non-pawn-knights to home squares
+;; 5) uncapture pawns with knights on appropriate columns
+;; 6) return knights and pawns to home rows
+
+(let [not-pawn-knight-placements (->> (board/piece-placements initial-board)
+                                      (remove (comp #{:knight :pawn}
+                                                    pieces/piece-type
+                                                    second)))
+      npkp-sqs (set (map first not-pawn-knight-placements))
+      pawn-knight-placements (->> (board/piece-placements initial-board)
+                                  (filter (comp #{:knight :pawn}
+                                                pieces/piece-type
+                                                second)))]
+  (defn solving-phase
+    [board]
+    (let [placements (delay (board/piece-placements board))
+          separated?
+          (delay
+            (let [get-rows (fn [color]
+                             (->> @placements
+                                  (filter #(= color (pieces/piece-color (second %))))
+                                  (map (comp sq/row first))))]
+              (<= (apply max (get-rows :white))
+                  (apply min (get-rows :black)))))]
+      (if (every? (fn [[sq piece]] (board/at? board sq piece))
+                  not-pawn-knight-placements)
+        (if (every? (fn [[sq piece]] (board/at? board sq piece))
+                    pawn-knight-placements)
+          ;; TODO: we can't here at the moment (don't know whose turn
+          ;; it is) but somewhere we'll need to care about the turn
+          ;; parity problem with just knights out
+          :initial
+          ;; oh this is tricky; consider e4,d5,exd5; do we need to recognize
+          ;; when a position is solvable? sounds hard; can save that for later
+          ;; I guess
+          (let [other-placements (remove (comp npkp-sqs first) @placements)]
+            ;; LOL this code doesn't recognize when you have extra
+            ;; promoted knights
+            (if (->> other-placements
+                     (every? (fn [[sq piece]]
+                               (or (pieces/knight? piece)
+                                   (and (pieces/pawn? piece)
+                                        (->> (pawn-behinds (pieces/piece-color piece) sq)
+                                             (not-any? (fn [sq]
+                                                         (pieces/pawn? (board/get board sq))))))))))
+              (if (= 20 (count other-placements))
+                :pawn-knights
+                :pawn-knights-uncapturing)
+              :TODO
+              )))))))
+
 (defn position-cost
   [{:keys [board]}]
   ;; hey we could attach weights to these and run some kind of
@@ -195,11 +287,12 @@
       ;; TODO: in the promoted piece phase we'll want a distances-from
       ;; depromation-square or something like that; will be hard to
       ;; privilege the more convenient columns...
-      (* ppc 1000)
+      (* ppc 10000)
       (+ (pieces-out-of-position board)
          (distances-from-home board)
-         (pieces-missing board)
-         (back-row-pieces-locked-out board)))))
+         (* 3 (pieces-missing board))
+         (back-row-pieces-locked-out board)
+         (* 50 (sad-pawns board))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; try something totally different!

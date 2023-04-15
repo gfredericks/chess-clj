@@ -44,6 +44,10 @@
   [p]
   (case p :B true :b true false))
 
+(defn knight?
+  [p]
+  (case p :N true :n true false))
+
 (defn blank?
   [p]
   (= :_ p))

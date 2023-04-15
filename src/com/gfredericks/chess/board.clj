@@ -49,6 +49,10 @@
         (bit-and 15)
         (pieces'))))
 
+(defn at?
+  [b sq piece]
+  (= piece (get b sq)))
+
 (defn set
   [b ^long sq piece]
   (let [piece-code (pieces piece)

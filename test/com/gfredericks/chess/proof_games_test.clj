@@ -1,5 +1,5 @@
 (ns com.gfredericks.chess.proof-games-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [are deftest is]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -96,6 +96,8 @@
 
 (defn -main
   []
+  (step-through-search #chess/fen "k7/8/8/8/8/8/8/7K w - - 4 3")
+  #_
   (doseq [pos [#chess/fen "rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/1RBQKBNR w Kkq - 4 3"
                #chess/fen "rnbqkbnr/1ppppppp/8/p7/4N3/8/PPPPPPPP/1RBQKBNR b Kkq - 1 3"
                #chess/fen "rnbqkbnr/p1pppppp/8/1p6/N7/7N/PPPPPPPP/R1BQKB1R b KQkq - 1 3"
@@ -121,3 +123,79 @@
         (prn (proof-games/run-search (proof-games/create-search p)
                                      2000
                                      {:print? false #_true})))))
+
+(defn slightly-longer-games-test
+  [pos]
+  (test-solvable-position pos 10000 50))
+
+(defspec slightly-longer-games 20
+  (prop/for-all [moves (gen/resize 10 rules-test/gen-game-prefix)]
+    (slightly-longer-games-test (reduce rules/make-move position/initial moves))))
+
+(comment
+  ;; these don't work yet (take forever)
+  (defn even-longer-games-test
+    [pos]
+    (test-solvable-position pos 10000 200))
+
+  (defspec even-longer-games 20
+    (prop/for-all [moves (gen/resize 25 rules-test/gen-game-prefix)]
+      (even-longer-games-test (reduce rules/make-move position/initial moves)))))
+
+
+;; Test ideas
+;; - get really good at positions with no promoted pieces first!
+;; - basic things
+;;   - like two kings in random positions, or with a few extra pieces
+;;   - extreme pawn positioning in various patterns
+;; - generate random positions that are provably legal
+;;   - e.g., if we surround each king such that it can't be in check, and then
+;;     spread pieces randomly throughout the rest of the board
+;;     - I guess the pawn positions could still make it unsolvable
+;;   - or a
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; phase-based tests
+
+(deftest solving-phase
+  (is (= :initial (proof-games/solving-phase (:board position/initial))))
+  (are [board] (= :pawn-knights (proof-games/solving-phase board))
+    #chess/fen-board "rnbqkbnr/pppppppp/8/8/8/P7/1PPPPPPP/RNBQKBNR"
+    #chess/fen-board "rnbqkbnr/pppppppp/8/8/8/6P1/PPPPPP1P/RNBQKBNR"
+    #chess/fen-board "rnbqkbnr/p1pppppp/1p6/8/8/6P1/PPPPPP1P/RNBQKBNR"
+    #chess/fen-board "rnbqkbnr/p1pppppp/1p6/8/8/5PP1/PPPPP2P/RNBQKBNR"
+    #chess/fen-board "rnbqkbnr/p2ppppp/1pp5/8/8/5PP1/PPPPP2P/RNBQKBNR"
+    #chess/fen-board "rnbqkbnr/p2ppppp/1pp5/8/8/2P2PP1/PP1PP2P/RNBQKBNR")
+
+  (are [board] (= :non-pawn-knights (proof-games/solving-phase board))
+    #chess/fen-board "rnbqkbnr/p1ppppp1/1p5p/P7/R7/8/1PPPPPPP/1NBQKBNR"
+    #chess/fen-board "rnbqkbnr/p1pppp2/1p4pp/P7/R7/8/1PPPPPPP/1NBQKBNR"
+    #chess/fen-board "rnbqkbnr/p1pppp2/1p4pp/P7/R5P1/8/1PPPPP1P/1NBQKBNR"
+    #chess/fen-board "rnbqkbnr/p1ppp3/1p3ppp/P7/R5P1/8/1PPPPP1P/1NBQKBNR"))
+
+(defn gen-positions-in-phase
+  [phase]
+  (gen/such-that some?
+                 (gen/let [moves rules-test/gen-game-prefix]
+                   ;; select the longest set of moves that produces
+                   ;; the phase we want, or nil otherwise
+                   (try
+                     (->> moves
+                          (reductions rules/make-move position/initial)
+                          (reverse)
+                          (map (juxt identity (comp proof-games/solving-phase :board)))
+                          (filter #(= phase (second %)))
+                          (ffirst))
+                     (catch Exception e
+                       (throw (ex-info "Ooof" {:moves moves} e)))))
+                 {:max-tries 100}))
+
+(defspec pawn-knights-phase 20
+  (prop/for-all [position (gen-positions-in-phase :pawn-knights)]
+    (test-solvable-position position 10000 100)))
+
+;; this takes forever -- probably time to go into position-cost and specialize it
+;; for this phase?
+(defspec pawn-knights-uncapturing-phase 20
+  (prop/for-all [position (gen-positions-in-phase :pawn-knights-uncapturing)]
+    (test-solvable-position (doto position prn) 10000 100)))
